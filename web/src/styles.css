@@ -2081,6 +2081,20 @@ footer {
   padding: 8px 9px;
   width: 100%;
 }
+.main-content > .list-panel .trace-filter-select,
+.main-content > .list-panel .trace-filter-date {
+  min-width: 0;
+  width: 100%;
+}
+.main-content > .list-panel .trace-filter-select .semi-select,
+.main-content > .list-panel .trace-filter-date .semi-datepicker-input-wrapper {
+  width: 100%;
+}
+.semi-popover-content .workspace-menu-popover {
+  box-shadow: none;
+  position: static;
+  width: 280px;
+}
 .main-content > .list-panel .trace-row {
   align-items: center;
   grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) auto;

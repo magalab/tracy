@@ -1,5 +1,6 @@
 import type { TraceSummary } from "../types";
 import { usePreferences } from "../i18n";
+import { DatePicker, Select } from "@douyinfe/semi-ui";
 
 type TraceListProps = {
   traces: TraceSummary[];
@@ -23,6 +24,16 @@ type TraceListProps = {
   onLoadMore: (cursor: string) => void;
   onClearFilters: () => void;
 };
+
+function toDateString(value: unknown) {
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+  return typeof value === "string" ? value.slice(0, 10) : "";
+}
 
 export function TraceList({
   traces,
@@ -50,7 +61,6 @@ export function TraceList({
   const visibleItems = traces.filter((item) =>
     item.trace_id.toLowerCase().includes(filter.toLowerCase()),
   );
-
   return (
     <section className="list-panel">
       <div className="panel-heading">
@@ -72,45 +82,45 @@ export function TraceList({
             placeholder={t("searchTraceID")}
           />
         </div>
-        <select
-          aria-label="Filter by status"
+        <Select
+          aria-label={t("allStatus")}
+          className="trace-filter-select"
+          placeholder={t("allStatus")}
+          showClear
           value={statusFilter}
-          onChange={(event) => onStatusChange(event.target.value)}
+          onChange={(value) => onStatusChange(String(value ?? ""))}
         >
-          <option value="">{t("allStatus")}</option>
-          <option value="ok">{t("healthyStatus")}</option>
-          <option value="error">{t("errors")}</option>
-        </select>
-        <label className="date-filter">
-          <span>{t("startDate")}</span>
-          <input
-            aria-label={t("startDate")}
-            type="date"
-            value={startDate}
-            onClick={(event) => event.currentTarget.showPicker?.()}
-            onChange={(event) => onStartDateChange(event.target.value)}
-          />
-        </label>
-        <label className="date-filter">
-          <span>{t("endDate")}</span>
-          <input
-            aria-label={t("endDate")}
-            type="date"
-            value={endDate}
-            onClick={(event) => event.currentTarget.showPicker?.()}
-            onChange={(event) => onEndDateChange(event.target.value)}
-          />
-        </label>
-        <select
-          aria-label="Filter by kind"
+          <Select.Option value="ok">{t("healthyStatus")}</Select.Option>
+          <Select.Option value="error">{t("errors")}</Select.Option>
+        </Select>
+        <DatePicker
+          aria-label={t("startDate")}
+          className="trace-filter-date"
+          format="yyyy-MM-dd"
+          placeholder={t("startDate")}
+          value={startDate || undefined}
+          onChange={(value) => onStartDateChange(toDateString(value))}
+        />
+        <DatePicker
+          aria-label={t("endDate")}
+          className="trace-filter-date"
+          format="yyyy-MM-dd"
+          placeholder={t("endDate")}
+          value={endDate || undefined}
+          onChange={(value) => onEndDateChange(toDateString(value))}
+        />
+        <Select
+          aria-label={t("allKinds")}
+          className="trace-filter-select"
+          placeholder={t("allKinds")}
+          showClear
           value={kindFilter}
-          onChange={(event) => onKindChange(event.target.value)}
+          onChange={(value) => onKindChange(String(value ?? ""))}
         >
-          <option value="">{t("allKinds")}</option>
-          <option value="llm">LLM</option>
-          <option value="tool">Tool</option>
-          <option value="agent">Agent</option>
-        </select>
+          <Select.Option value="llm">LLM</Select.Option>
+          <Select.Option value="tool">Tool</Select.Option>
+          <Select.Option value="agent">Agent</Select.Option>
+        </Select>
       </div>
       <div className="list-caption">
         <span>
