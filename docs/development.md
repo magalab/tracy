@@ -38,6 +38,18 @@ npm run dev
 
 Vite 会把 `/api` 请求代理到本地 Go 服务。发布前运行 `make build`。
 
+前端工程化检查使用 Oxlint 和 Oxfmt：
+
+```bash
+cd web
+npm run lint          # 静态检查
+npm run format        # 格式化源码
+npm run format:check  # 只检查格式，不修改文件
+npm run check         # 格式检查 + lint + TypeScript/Vite 构建
+```
+
+仓库根目录也提供 `make web-check`。依赖版本固定在 `web/package-lock.json`，避免不同开发机使用不同工具版本。
+
 ## 测试约定
 
 契约测试只依赖 `BASE_URL`，不导入服务内部包。每新增 endpoint，至少增加请求、认证失败、Project 隔离和错误响应测试。后续 Go/Rust 或不同 TraceStore 应复用同一套黑盒测试。

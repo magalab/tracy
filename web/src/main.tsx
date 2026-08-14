@@ -1,12 +1,51 @@
-import { StrictMode, useEffect, useMemo, useState } from "react";
+import { StrictMode, useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-type TraceSummary = { project_id: string; trace_id: string; start_time: string; end_time: string; span_count: number; status: string; input_tokens: number; output_tokens: number };
-type Span = { project_id: string; trace_id: string; span_id: string; parent_span_id?: string; name: string; kind: string; start_time: string; duration: number; status: string; input?: string; output?: string; attributes?: Record<string, unknown> };
-type Annotation = { id: string; trace_id: string; span_id?: string; key: string; score?: number; label?: string; comment?: string; created_at: string };
+type TraceSummary = {
+  project_id: string;
+  trace_id: string;
+  start_time: string;
+  end_time: string;
+  span_count: number;
+  status: string;
+  input_tokens: number;
+  output_tokens: number;
+};
+type Span = {
+  project_id: string;
+  trace_id: string;
+  span_id: string;
+  parent_span_id?: string;
+  name: string;
+  kind: string;
+  start_time: string;
+  duration: number;
+  status: string;
+  input?: string;
+  output?: string;
+  attributes?: Record<string, unknown>;
+};
+type Annotation = {
+  id: string;
+  trace_id: string;
+  span_id?: string;
+  key: string;
+  score?: number;
+  label?: string;
+  comment?: string;
+  created_at: string;
+};
 type Page = { items: TraceSummary[]; next_cursor?: string };
-type DashboardMetrics = { request_count: number; error_count: number; error_rate: number; input_tokens: number; output_tokens: number; p95_latency_ms: number; usage_breakdown?: { key: string; span_count: number }[] };
+type DashboardMetrics = {
+  request_count: number;
+  error_count: number;
+  error_rate: number;
+  input_tokens: number;
+  output_tokens: number;
+  p95_latency_ms: number;
+  usage_breakdown?: { key: string; span_count: number }[];
+};
 
 const tokenKey = "tracy.api_token";
 async function request<T>(path: string, token: string): Promise<T> {
@@ -15,7 +54,10 @@ async function request<T>(path: string, token: string): Promise<T> {
   if (!response.ok) throw new Error(data.error?.message ?? `Request failed (${response.status})`);
   return data as T;
 }
-function formatDuration(nanoseconds: number) { const ms = nanoseconds / 1_000_000; return ms < 1 ? `${Math.round(nanoseconds / 1_000)}μs` : `${ms.toFixed(2)}ms`; }
+function formatDuration(nanoseconds: number) {
+  const ms = nanoseconds / 1_000_000;
+  return ms < 1 ? `${Math.round(nanoseconds / 1_000)}μs` : `${ms.toFixed(2)}ms`;
+}
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem(tokenKey) ?? "");
   const [draftToken, setDraftToken] = useState(token);
@@ -34,26 +76,412 @@ function App() {
   const [annotationScore, setAnnotationScore] = useState("1");
   const [annotationLabel, setAnnotationLabel] = useState("");
   const [annotationComment, setAnnotationComment] = useState("");
-  const visibleItems = useMemo(() => page.items.filter((item) => item.trace_id.toLowerCase().includes(filter.toLowerCase())), [page.items, filter]);
-  const selectedSummary = page.items.find((item) => item.trace_id === selectedID);
-  async function loadPage(nextCursor?: string) { if (!token) return; setLoading(true); setError(""); try { const params = new URLSearchParams({ limit: "50" }); if (nextCursor) params.set("cursor", nextCursor); if (statusFilter) params.set("status", statusFilter); if (kindFilter) params.set("kind", kindFilter); const next = await request<Page>(`/api/v1/traces?${params.toString()}`, token); setPage({ ...next, items: next.items ?? [] }); setCursor(next.next_cursor); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setLoading(false); } }
-  async function loadMetrics() { if (!token) return; try { setMetrics(await request<DashboardMetrics>("/api/v1/dashboard", token)); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }
-  async function openTrace(id: string) { setSelectedID(id); setError(""); try { const [result, annotationResult] = await Promise.all([request<{ spans: Span[] }>(`/api/v1/traces/${encodeURIComponent(id)}`, token), request<{ items: Annotation[] }>(`/api/v1/traces/${encodeURIComponent(id)}/annotations`, token)]); setSelected(result.spans); setAnnotations(annotationResult.items); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }
-  async function addAnnotation() { if (!selectedID || !annotationKey.trim()) return; try { const response = await fetch(`/api/v1/traces/${encodeURIComponent(selectedID)}/annotations`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ key: annotationKey.trim(), score: Number(annotationScore), label: annotationLabel, comment: annotationComment }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error?.message ?? `Request failed (${response.status})`); setAnnotations((items) => [...items, data as Annotation]); setAnnotationLabel(""); setAnnotationComment(""); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }
-  async function deleteAnnotation(id: string) { try { const response = await fetch(`/api/v1/annotations/${encodeURIComponent(id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }); if (!response.ok) throw new Error(`Delete failed (${response.status})`); setAnnotations((items) => items.filter((item) => item.id !== id)); } catch (err) { setError(err instanceof Error ? err.message : String(err)); } }
-  function saveToken() { localStorage.setItem(tokenKey, draftToken); setToken(draftToken); setSelected([]); setAnnotations([]); setSelectedID(""); }
-  useEffect(() => { if (token) { void loadPage(); void loadMetrics(); } }, [token, statusFilter, kindFilter]);
-  return <div className="app-shell">
-    <header className="topbar"><div><span className="eyebrow">SELF-HOSTED OBSERVABILITY</span><h1>Tracy <span>Trace Explorer</span></h1></div><div className="token-form"><input value={draftToken} onChange={(e) => setDraftToken(e.target.value)} type="password" placeholder="API key" onKeyDown={(e) => e.key === "Enter" && saveToken()} /><button onClick={saveToken}>Connect</button></div></header>
-    <main className="main-content">
-      <section className="overview-header"><div><span className="eyebrow">OPERATIONS / LAST 24 HOURS</span><h2>Trace health at a glance</h2><p>Inspect throughput, failures and latency before drilling into a run.</p></div><div className="live-indicator"><span className="live-dot" /> LIVE LOCAL STORE</div></section>
-      {metrics && <section className="overview-grid"><article className="metric-card metric-card-primary"><span className="metric-label">Requests</span><strong>{metrics.request_count.toLocaleString()}</strong><small>traces observed</small><span className="metric-mark">↗</span></article><article className="metric-card"><span className="metric-label">Error rate</span><strong>{(metrics.error_rate * 100).toFixed(1)}<em>%</em></strong><small>{metrics.error_count.toLocaleString()} failed traces</small><span className={`metric-status ${metrics.error_count ? "warning" : "good"}`}>{metrics.error_count ? "needs attention" : "healthy"}</span></article><article className="metric-card"><span className="metric-label">P95 latency</span><strong>{metrics.p95_latency_ms.toFixed(1)}<em>ms</em></strong><small>end-to-end trace duration</small><span className="metric-status neutral">tail performance</span></article><article className="metric-card"><span className="metric-label">Token volume</span><strong>{(metrics.input_tokens + metrics.output_tokens).toLocaleString()}</strong><small>{metrics.input_tokens.toLocaleString()} in · {metrics.output_tokens.toLocaleString()} out</small><span className="metric-status neutral">across all traces</span></article></section>}
-      <section className="workspace">
-      <section className="list-panel"><div className="panel-heading"><div><span className="eyebrow">PROJECT / DEFAULT</span><h2>Recent traces</h2></div><button className="ghost" onClick={() => { void loadPage(); void loadMetrics(); }} disabled={loading}>↻ Refresh</button></div><div className="toolbar"><div className="search-field"><span>⌕</span><input aria-label="Filter by trace ID" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Search trace ID…" /></div><select aria-label="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="">All status</option><option value="ok">Healthy</option><option value="error">Errors</option></select><select aria-label="Filter by kind" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}><option value="">All kinds</option><option value="llm">LLM</option><option value="tool">Tool</option><option value="agent">Agent</option></select></div><div className="list-caption"><span>{visibleItems.length} traces in view</span><span>{statusFilter || kindFilter ? "Filtered results" : "Newest first"}</span></div>{error && <div className="error">{error}</div>}{!token && <div className="empty"><strong>Connect a project</strong><p>Enter an API key above to inspect traces.</p></div>}{token && loading && <div className="empty">Loading traces…</div>}{token && !loading && visibleItems.length === 0 && <div className="empty"><strong>No traces match</strong><p>Try clearing the filters or send a span to the ingest endpoint.</p><button className="ghost" onClick={() => { setFilter(""); setStatusFilter(""); setKindFilter(""); }}>Clear filters</button></div>}<div className="trace-list">{visibleItems.map((trace) => <button className={`trace-row ${selectedID === trace.trace_id ? "active" : ""}`} key={trace.trace_id} onClick={() => void openTrace(trace.trace_id)}><span className={`status-dot ${trace.status}`} /><span className="trace-main"><div className="trace-title"><strong>{trace.trace_id}</strong><span className={`status-badge ${trace.status}`}>{trace.status === "error" ? "Error" : "Healthy"}</span></div><small>{new Date(trace.start_time).toLocaleString()}</small><div className="trace-facts"><span>{trace.span_count} spans</span><span>{(trace.input_tokens + trace.output_tokens).toLocaleString()} tokens</span></div></span><span className="trace-meta"><b>{(new Date(trace.end_time).getTime() - new Date(trace.start_time).getTime()).toFixed(0)}ms</b><small>open trace&nbsp; →</small></span></button>)}</div>{cursor && <button className="load-more" onClick={() => void loadPage(cursor)}>Load older traces</button>}</section>
-      <section className="detail-panel">{selectedID ? <><div className="detail-heading"><div><span className="eyebrow">TRACE DETAIL</span><h2>{selectedID}</h2></div><span className="pill">{selected.length} spans</span></div><div className="span-tree">{selected.map((span) => <article className="span-card" key={span.span_id}><div className="span-line"><span className="tree-mark">{span.parent_span_id ? "└" : "●"}</span><span className={`status-dot ${span.status}`} /><strong>{span.name}</strong><span className="kind">{span.kind || "custom"}</span><span className="duration">{formatDuration(span.duration)}</span></div><div className="span-subline">{span.span_id} · {new Date(span.start_time).toLocaleTimeString()}</div>{(span.input || span.output) && <div className="io-grid">{span.input && <div><label>INPUT</label><pre>{span.input}</pre></div>}{span.output && <div><label>OUTPUT</label><pre>{span.output}</pre></div>}</div>}{span.attributes && Object.keys(span.attributes).length > 0 && <details><summary>Attributes ({Object.keys(span.attributes).length})</summary><pre>{JSON.stringify(span.attributes, null, 2)}</pre></details>}</article>)}</div><section className="annotation-panel"><div className="detail-heading"><div><span className="eyebrow">FEEDBACK</span><h2>Annotations</h2></div><span className="pill">{annotations.length}</span></div><div className="annotation-form"><input value={annotationKey} onChange={(e) => setAnnotationKey(e.target.value)} placeholder="key" /><input value={annotationScore} onChange={(e) => setAnnotationScore(e.target.value)} type="number" min="0" max="1" step="0.1" placeholder="score" /><input value={annotationLabel} onChange={(e) => setAnnotationLabel(e.target.value)} placeholder="label" /><input value={annotationComment} onChange={(e) => setAnnotationComment(e.target.value)} placeholder="comment" /><button onClick={() => void addAnnotation()}>Add</button></div>{annotations.map((item) => <div className="annotation-row" key={item.id}><span className="kind">{item.key}</span><strong>{item.label || "—"}</strong><span>{item.score ?? "—"}</span><small>{item.comment}</small><button className="delete-button" onClick={() => void deleteAnnotation(item.id)}>×</button></div>)}</section></> : <div className="detail-empty"><div className="orbit">✦</div><h2>Select a trace</h2><p>Choose a trace from the list to inspect its span tree, timing, inputs and outputs.</p></div>}</section>
-      </section>
-    </main>
-    <footer><span>TRACY / LOCAL MODE</span><span>SQLite trace store · API v1</span></footer>
-  </div>;
+  const visibleItems = useMemo(
+    () => page.items.filter((item) => item.trace_id.toLowerCase().includes(filter.toLowerCase())),
+    [page.items, filter],
+  );
+  const loadPage = useCallback(
+    async (nextCursor?: string) => {
+      if (!token) return;
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams({ limit: "50" });
+        if (nextCursor) params.set("cursor", nextCursor);
+        if (statusFilter) params.set("status", statusFilter);
+        if (kindFilter) params.set("kind", kindFilter);
+        const next = await request<Page>(`/api/v1/traces?${params.toString()}`, token);
+        setPage({ ...next, items: next.items ?? [] });
+        setCursor(next.next_cursor);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [kindFilter, statusFilter, token],
+  );
+  const loadMetrics = useCallback(async () => {
+    if (!token) return;
+    try {
+      setMetrics(await request<DashboardMetrics>("/api/v1/dashboard", token));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [token]);
+  async function openTrace(id: string) {
+    setSelectedID(id);
+    setError("");
+    try {
+      const [result, annotationResult] = await Promise.all([
+        request<{ spans: Span[] }>(`/api/v1/traces/${encodeURIComponent(id)}`, token),
+        request<{ items: Annotation[] }>(
+          `/api/v1/traces/${encodeURIComponent(id)}/annotations`,
+          token,
+        ),
+      ]);
+      setSelected(result.spans);
+      setAnnotations(annotationResult.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+  async function addAnnotation() {
+    if (!selectedID || !annotationKey.trim()) return;
+    try {
+      const response = await fetch(`/api/v1/traces/${encodeURIComponent(selectedID)}/annotations`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: annotationKey.trim(),
+          score: Number(annotationScore),
+          label: annotationLabel,
+          comment: annotationComment,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok)
+        throw new Error(data.error?.message ?? `Request failed (${response.status})`);
+      setAnnotations((items) => [...items, data as Annotation]);
+      setAnnotationLabel("");
+      setAnnotationComment("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+  async function deleteAnnotation(id: string) {
+    try {
+      const response = await fetch(`/api/v1/annotations/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) throw new Error(`Delete failed (${response.status})`);
+      setAnnotations((items) => items.filter((item) => item.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+  function saveToken() {
+    localStorage.setItem(tokenKey, draftToken);
+    setToken(draftToken);
+    setSelected([]);
+    setAnnotations([]);
+    setSelectedID("");
+  }
+  useEffect(() => {
+    if (token) {
+      void loadPage();
+      void loadMetrics();
+    }
+  }, [loadMetrics, loadPage, token]);
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <div>
+          <span className="eyebrow">SELF-HOSTED OBSERVABILITY</span>
+          <h1>
+            Tracy <span>Trace Explorer</span>
+          </h1>
+        </div>
+        <div className="token-form">
+          <input
+            value={draftToken}
+            onChange={(e) => setDraftToken(e.target.value)}
+            type="password"
+            placeholder="API key"
+            onKeyDown={(e) => e.key === "Enter" && saveToken()}
+          />
+          <button onClick={saveToken}>Connect</button>
+        </div>
+      </header>
+      <main className="main-content">
+        <section className="overview-header">
+          <div>
+            <span className="eyebrow">OPERATIONS / LAST 24 HOURS</span>
+            <h2>Trace health at a glance</h2>
+            <p>Inspect throughput, failures and latency before drilling into a run.</p>
+          </div>
+          <div className="live-indicator">
+            <span className="live-dot" /> LIVE LOCAL STORE
+          </div>
+        </section>
+        {metrics && (
+          <section className="overview-grid">
+            <article className="metric-card metric-card-primary">
+              <span className="metric-label">Requests</span>
+              <strong>{metrics.request_count.toLocaleString()}</strong>
+              <small>traces observed</small>
+              <span className="metric-mark">↗</span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Error rate</span>
+              <strong>
+                {(metrics.error_rate * 100).toFixed(1)}
+                <em>%</em>
+              </strong>
+              <small>{metrics.error_count.toLocaleString()} failed traces</small>
+              <span className={`metric-status ${metrics.error_count ? "warning" : "good"}`}>
+                {metrics.error_count ? "needs attention" : "healthy"}
+              </span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">P95 latency</span>
+              <strong>
+                {metrics.p95_latency_ms.toFixed(1)}
+                <em>ms</em>
+              </strong>
+              <small>end-to-end trace duration</small>
+              <span className="metric-status neutral">tail performance</span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Token volume</span>
+              <strong>{(metrics.input_tokens + metrics.output_tokens).toLocaleString()}</strong>
+              <small>
+                {metrics.input_tokens.toLocaleString()} in ·{" "}
+                {metrics.output_tokens.toLocaleString()} out
+              </small>
+              <span className="metric-status neutral">across all traces</span>
+            </article>
+          </section>
+        )}
+        <section className="workspace">
+          <section className="list-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="eyebrow">PROJECT / DEFAULT</span>
+                <h2>Recent traces</h2>
+              </div>
+              <button
+                className="ghost"
+                onClick={() => {
+                  void loadPage();
+                  void loadMetrics();
+                }}
+                disabled={loading}
+              >
+                ↻ Refresh
+              </button>
+            </div>
+            <div className="toolbar">
+              <div className="search-field">
+                <span>⌕</span>
+                <input
+                  aria-label="Filter by trace ID"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Search trace ID…"
+                />
+              </div>
+              <select
+                aria-label="Filter by status"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="">All status</option>
+                <option value="ok">Healthy</option>
+                <option value="error">Errors</option>
+              </select>
+              <select
+                aria-label="Filter by kind"
+                value={kindFilter}
+                onChange={(e) => setKindFilter(e.target.value)}
+              >
+                <option value="">All kinds</option>
+                <option value="llm">LLM</option>
+                <option value="tool">Tool</option>
+                <option value="agent">Agent</option>
+              </select>
+            </div>
+            <div className="list-caption">
+              <span>{visibleItems.length} traces in view</span>
+              <span>{statusFilter || kindFilter ? "Filtered results" : "Newest first"}</span>
+            </div>
+            {error && <div className="error">{error}</div>}
+            {!token && (
+              <div className="empty">
+                <strong>Connect a project</strong>
+                <p>Enter an API key above to inspect traces.</p>
+              </div>
+            )}
+            {token && loading && <div className="empty">Loading traces…</div>}
+            {token && !loading && visibleItems.length === 0 && (
+              <div className="empty">
+                <strong>No traces match</strong>
+                <p>Try clearing the filters or send a span to the ingest endpoint.</p>
+                <button
+                  className="ghost"
+                  onClick={() => {
+                    setFilter("");
+                    setStatusFilter("");
+                    setKindFilter("");
+                  }}
+                >
+                  Clear filters
+                </button>
+              </div>
+            )}
+            <div className="trace-list">
+              {visibleItems.map((trace) => (
+                <button
+                  className={`trace-row ${selectedID === trace.trace_id ? "active" : ""}`}
+                  key={trace.trace_id}
+                  aria-label={`Open trace ${trace.trace_id}`}
+                  onClick={() => void openTrace(trace.trace_id)}
+                >
+                  <span className={`status-dot ${trace.status}`} />
+                  <span className="trace-main">
+                    <div className="trace-title">
+                      <strong>{trace.trace_id}</strong>
+                      <span className={`status-badge ${trace.status}`}>
+                        {trace.status === "error" ? "Error" : "Healthy"}
+                      </span>
+                    </div>
+                    <small>{new Date(trace.start_time).toLocaleString()}</small>
+                    <div className="trace-facts">
+                      <span>{trace.span_count} spans</span>
+                      <span>
+                        {(trace.input_tokens + trace.output_tokens).toLocaleString()} tokens
+                      </span>
+                    </div>
+                  </span>
+                  <span className="trace-meta">
+                    <b>
+                      {(
+                        new Date(trace.end_time).getTime() - new Date(trace.start_time).getTime()
+                      ).toFixed(0)}
+                      ms
+                    </b>
+                    <small>open trace&nbsp; →</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+            {cursor && (
+              <button className="load-more" onClick={() => void loadPage(cursor)}>
+                Load older traces
+              </button>
+            )}
+          </section>
+          <section className="detail-panel">
+            {selectedID ? (
+              <>
+                <div className="detail-heading">
+                  <div>
+                    <span className="eyebrow">TRACE DETAIL</span>
+                    <h2>{selectedID}</h2>
+                  </div>
+                  <span className="pill">{selected.length} spans</span>
+                </div>
+                <div className="span-tree">
+                  {selected.map((span) => (
+                    <article className="span-card" key={span.span_id}>
+                      <div className="span-line">
+                        <span className="tree-mark">{span.parent_span_id ? "└" : "●"}</span>
+                        <span className={`status-dot ${span.status}`} />
+                        <strong>{span.name}</strong>
+                        <span className="kind">{span.kind || "custom"}</span>
+                        <span className="duration">{formatDuration(span.duration)}</span>
+                      </div>
+                      <div className="span-subline">
+                        {span.span_id} · {new Date(span.start_time).toLocaleTimeString()}
+                      </div>
+                      {(span.input || span.output) && (
+                        <div className="io-grid">
+                          {span.input && (
+                            <div>
+                              <span className="field-label">INPUT</span>
+                              <pre>{span.input}</pre>
+                            </div>
+                          )}
+                          {span.output && (
+                            <div>
+                              <span className="field-label">OUTPUT</span>
+                              <pre>{span.output}</pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {span.attributes && Object.keys(span.attributes).length > 0 && (
+                        <details>
+                          <summary>Attributes ({Object.keys(span.attributes).length})</summary>
+                          <pre>{JSON.stringify(span.attributes, null, 2)}</pre>
+                        </details>
+                      )}
+                    </article>
+                  ))}
+                </div>
+                <section className="annotation-panel">
+                  <div className="detail-heading">
+                    <div>
+                      <span className="eyebrow">FEEDBACK</span>
+                      <h2>Annotations</h2>
+                    </div>
+                    <span className="pill">{annotations.length}</span>
+                  </div>
+                  <div className="annotation-form">
+                    <input
+                      value={annotationKey}
+                      onChange={(e) => setAnnotationKey(e.target.value)}
+                      placeholder="key"
+                    />
+                    <input
+                      value={annotationScore}
+                      onChange={(e) => setAnnotationScore(e.target.value)}
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      placeholder="score"
+                    />
+                    <input
+                      value={annotationLabel}
+                      onChange={(e) => setAnnotationLabel(e.target.value)}
+                      placeholder="label"
+                    />
+                    <input
+                      value={annotationComment}
+                      onChange={(e) => setAnnotationComment(e.target.value)}
+                      placeholder="comment"
+                    />
+                    <button onClick={() => void addAnnotation()}>Add</button>
+                  </div>
+                  {annotations.map((item) => (
+                    <div className="annotation-row" key={item.id}>
+                      <span className="kind">{item.key}</span>
+                      <strong>{item.label || "—"}</strong>
+                      <span>{item.score ?? "—"}</span>
+                      <small>{item.comment}</small>
+                      <button
+                        className="delete-button"
+                        onClick={() => void deleteAnnotation(item.id)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </section>
+              </>
+            ) : (
+              <div className="detail-empty">
+                <div className="orbit">✦</div>
+                <h2>Select a trace</h2>
+                <p>
+                  Choose a trace from the list to inspect its span tree, timing, inputs and outputs.
+                </p>
+              </div>
+            )}
+          </section>
+        </section>
+      </main>
+      <footer>
+        <span>TRACY / LOCAL MODE</span>
+        <span>SQLite trace store · API v1</span>
+      </footer>
+    </div>
+  );
 }
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);

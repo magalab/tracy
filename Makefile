@@ -1,4 +1,4 @@
-.PHONY: test vet test-cozeloop build build-web run
+.PHONY: test vet test-cozeloop build build-web web-check run
 
 test:
 	go test ./...
@@ -14,6 +14,9 @@ run:
 
 build-web:
 	cd web && npm install --include=dev && npm run build
+
+web-check:
+	cd web && npm run check
 
 build: build-web
 	go build -o bin/tracy-server ./cmd/server
