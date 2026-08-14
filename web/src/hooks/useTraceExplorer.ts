@@ -74,6 +74,12 @@ export function useTraceExplorer(token: string, statusFilter: string, kindFilter
     [token],
   );
 
+  const clearSelection = useCallback(() => {
+    setSelectedID("");
+    setSelected([]);
+    setAnnotations([]);
+  }, []);
+
   const addAnnotation = useCallback(
     async (input: { key: string; score: number; label: string; comment: string }) => {
       if (!selectedID || !input.key.trim()) return;
@@ -115,12 +121,14 @@ export function useTraceExplorer(token: string, statusFilter: string, kindFilter
       loadPage,
       loadMetrics,
       openTrace,
+      clearSelection,
       addAnnotation,
       removeAnnotation,
     }),
     [
       addAnnotation,
       annotations,
+      clearSelection,
       cursor,
       error,
       loadMetrics,

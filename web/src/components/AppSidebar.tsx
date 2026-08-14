@@ -11,6 +11,8 @@ type AppSidebarProps = {
   onSelectWorkspace: (id: string) => Promise<void>;
   onCreateWorkspace: (name: string) => Promise<void>;
   onLogout: () => void;
+  collapsed: boolean;
+  onToggle: () => void;
 };
 
 type NavItem = { icon: string; label: TranslationKey; active?: boolean };
@@ -31,16 +33,18 @@ export function AppSidebar({
   onSelectWorkspace,
   onCreateWorkspace,
   onLogout,
+  collapsed,
+  onToggle,
 }: AppSidebarProps) {
   const { t } = usePreferences();
 
   return (
-    <aside className="app-sidebar">
+    <aside className={`app-sidebar ${collapsed ? "collapsed" : ""}`}>
       <div className="sidebar-brand">
         <img className="brand-mark" src="/tracy.svg" alt="Tracy" />
         <strong>Tracy</strong>
-        <button className="sidebar-collapse" aria-label={t("collapseSidebar")}>
-          ‹
+        <button className="sidebar-collapse" aria-label={t("collapseSidebar")} onClick={onToggle}>
+          {collapsed ? "›" : "‹"}
         </button>
       </div>
       <WorkspaceMenu

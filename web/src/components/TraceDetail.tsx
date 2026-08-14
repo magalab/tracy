@@ -11,6 +11,7 @@ type TraceDetailProps = {
   onDraftChange: (draft: AnnotationDraft) => void;
   onAddAnnotation: () => void;
   onDeleteAnnotation: (id: string) => void;
+  onBack: () => void;
 };
 
 function formatDuration(nanoseconds: number) {
@@ -92,6 +93,7 @@ export function TraceDetail({
   onDraftChange,
   onAddAnnotation,
   onDeleteAnnotation,
+  onBack,
 }: TraceDetailProps) {
   const { t } = usePreferences();
   if (!selectedID) {
@@ -108,23 +110,71 @@ export function TraceDetail({
 
   return (
     <section className="detail-panel">
-      <div className="detail-heading">
-        <div>
-          <span className="eyebrow">{t("traceDetail")}</span>
-          <h2>{selectedID}</h2>
-        </div>
-        <span className="pill">
+      <div className="trace-detail-toolbar">
+        <button className="detail-back" onClick={onBack} aria-label={t("backToTraces")}>
+          ×
+        </button>
+        <strong>{selectedID}</strong>
+        <span
+          className={`status-badge ${selected.some((span) => span.status === "error") ? "error" : "ok"}`}
+        >
+          {selected.some((span) => span.status === "error") ? t("errors") : t("healthyStatus")}
+        </span>
+        <span className="detail-toolbar-fact">
+          {formatDuration(selected.reduce((total, span) => total + span.duration, 0))}
+        </span>
+        <span className="detail-toolbar-fact">
           {selected.length} {t("spans")}
         </span>
       </div>
-      <SpanTree spans={selected} />
-      <AnnotationPanel
-        annotations={annotations}
-        draft={draft}
-        onDraftChange={onDraftChange}
-        onAdd={onAddAnnotation}
-        onDelete={onDeleteAnnotation}
-      />
+      <div className="detail-heading">
+        <div>
+          <h2>{t("traceDetail")}</h2>
+        </div>
+        <div className="detail-tabs">
+          <button className="active">{t("run")}</button>
+          <button>{t("metadata")}</button>
+          <button>{t("feedback")}</button>
+        </div>
+      </div>
+      <div className="detail-workbench">
+        <div className="detail-tree-column">
+          <SpanTree spans={selected} />
+        </div>
+        <div className="detail-content-column">
+          <div className="detail-section-title">
+            <h3>{t("input")}</h3>
+            <span>{t("raw")}</span>
+          </div>
+          <div className="detail-json-placeholder">
+            {selected[0]?.input || selected[0]?.output || "—"}
+          </div>
+          <div className="detail-section-title">
+            <h3>{t("output")}</h3>
+            <span>{t("raw")}</span>
+          </div>
+          <div className="detail-json-placeholder">{selected[0]?.output || "—"}</div>
+          <AnnotationPanel
+            annotations={annotations}
+            draft={draft}
+            onDraftChange={onDraftChange}
+            onAdd={onAddAnnotation}
+            onDelete={onDeleteAnnotation}
+          />
+        </div>
+        <aside className="detail-facts-panel">
+          <span>{t("status")}</span>
+          <b>
+            {selected.some((span) => span.status === "error") ? t("errors") : t("healthyStatus")}
+          </b>
+          <span>{t("spanID")}</span>
+          <b>{selected[0]?.span_id || "—"}</b>
+          <span>{t("duration")}</span>
+          <b>{formatDuration(selected.reduce((total, span) => total + span.duration, 0))}</b>
+          <span>{t("startTime")}</span>
+          <b>{selected[0] ? new Date(selected[0].start_time).toLocaleString() : "—"}</b>
+        </aside>
+      </div>
     </section>
   );
 }

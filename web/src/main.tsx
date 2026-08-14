@@ -42,6 +42,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
   const [overviewOpen, setOverviewOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft>({
     key: "quality",
     score: "1",
@@ -154,6 +155,8 @@ function App() {
         onSelectWorkspace={selectWorkspace}
         onCreateWorkspace={createUserWorkspace}
         onLogout={logout}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
       />
       <div className="app-main">
         <header className="topbar">
@@ -199,7 +202,18 @@ function App() {
             </div>
           </section>
           {overviewOpen && explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
-          <section className="workspace">
+          {explorer.selectedID ? (
+            <TraceDetail
+              selectedID={explorer.selectedID}
+              selected={explorer.selected}
+              annotations={explorer.annotations}
+              draft={annotationDraft}
+              onDraftChange={setAnnotationDraft}
+              onAddAnnotation={addAnnotation}
+              onDeleteAnnotation={(id) => void explorer.removeAnnotation(id)}
+              onBack={explorer.clearSelection}
+            />
+          ) : (
             <TraceList
               traces={explorer.page.items}
               selectedID={explorer.selectedID}
@@ -221,16 +235,7 @@ function App() {
               onLoadMore={(nextCursor) => void explorer.loadPage(nextCursor)}
               onClearFilters={clearFilters}
             />
-            <TraceDetail
-              selectedID={explorer.selectedID}
-              selected={explorer.selected}
-              annotations={explorer.annotations}
-              draft={annotationDraft}
-              onDraftChange={setAnnotationDraft}
-              onAddAnnotation={addAnnotation}
-              onDeleteAnnotation={(id) => void explorer.removeAnnotation(id)}
-            />
-          </section>
+          )}
         </main>
         <footer>
           <span>{t("localMode")}</span>
