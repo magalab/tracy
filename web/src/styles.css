@@ -664,9 +664,11 @@ select {
   border: 1px solid #263b5b;
   color: #9db8df;
   display: inline-flex;
-  font-size: 11px;
-  gap: 8px;
-  padding: 7px 10px;
+  font-size: 17px;
+  height: 34px;
+  justify-content: center;
+  padding: 4px;
+  width: 34px;
 }
 .overview-toggle:hover {
   background: #12223a;

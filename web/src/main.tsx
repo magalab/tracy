@@ -90,9 +90,13 @@ function App() {
             <div className="live-indicator">
               <span className="live-dot" /> {t("liveStore")}
             </div>
-            <button className="overview-toggle" onClick={() => setOverviewOpen((open) => !open)}>
-              {overviewOpen ? t("hideOverview") : t("showOverview")}
-              <span>{overviewOpen ? "↑" : "↓"}</span>
+            <button
+              className="overview-toggle"
+              onClick={() => setOverviewOpen((open) => !open)}
+              aria-label={overviewOpen ? t("hideOverview") : t("showOverview")}
+              title={overviewOpen ? t("hideOverview") : t("showOverview")}
+            >
+              {overviewOpen ? "⌃" : "⌄"}
             </button>
           </div>
         </section>
