@@ -6,6 +6,7 @@ import { MetricsOverview } from "./components/MetricsOverview";
 import { TraceDetail } from "./components/TraceDetail";
 import { TraceList } from "./components/TraceList";
 import { UserMenu } from "./components/UserMenu";
+import { WorkspaceMenu } from "./components/WorkspaceMenu";
 import { WorkspacePicker } from "./components/WorkspacePicker";
 import {
   getCurrentUser,
@@ -151,6 +152,12 @@ function App() {
           <img className="brand-mark" src="/tracy.svg" alt="Tracy" />
         </div>
         <div className="topbar-actions">
+          <WorkspaceMenu
+            workspaces={workspaces}
+            activeID={activeWorkspaceID}
+            onSelect={selectWorkspace}
+            onCreate={createUserWorkspace}
+          />
           <div className="preference-actions">
             <button className="preference-button" onClick={toggleLanguage}>
               {language === "en" ? "中" : "EN"}

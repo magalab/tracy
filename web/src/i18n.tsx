@@ -90,6 +90,8 @@ const messages = {
     chooseWorkspace: "Choose a workspace",
     workspaceName: "Workspace name",
     createWorkspace: "Create workspace",
+    switchWorkspace: "Switch workspace",
+    newWorkspace: "New workspace",
   },
   zh: {
     brandEyebrow: "自托管可观测性",
@@ -176,6 +178,8 @@ const messages = {
     chooseWorkspace: "选择 Workspace",
     workspaceName: "Workspace 名称",
     createWorkspace: "创建 Workspace",
+    switchWorkspace: "切换 Workspace",
+    newWorkspace: "新建 Workspace",
   },
 } as const;
 
