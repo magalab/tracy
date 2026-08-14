@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { AnnotationDraft } from "./components/AnnotationPanel";
 import { AppSidebar } from "./components/AppSidebar";
 import { LoginPage } from "./components/LoginPage";
+import { MetricsOverview } from "./components/MetricsOverview";
 import { TraceDetail } from "./components/TraceDetail";
 import { TraceList } from "./components/TraceList";
 import { WorkspacePicker } from "./components/WorkspacePicker";
@@ -43,6 +44,7 @@ function App() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activePage, setActivePage] = useState<"overview" | "traces">("traces");
   const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft>({
     key: "quality",
     score: "1",
@@ -164,13 +166,17 @@ function App() {
         onLogout={logout}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
-        metrics={explorer.metrics}
+        activePage={activePage}
+        onPageChange={(page) => {
+          setActivePage(page);
+          if (page === "overview") explorer.clearSelection();
+        }}
       />
       <div className="app-main">
         <header className="topbar">
           <div className="trace-context">
-            <span className="eyebrow">{t("trace")}</span>
-            <h1>{t("traceExplorer")}</h1>
+            <span className="eyebrow">{t(activePage === "overview" ? "overview" : "trace")}</span>
+            <h1>{t(activePage === "overview" ? "traceHealth" : "traceExplorer")}</h1>
           </div>
           <div className="topbar-actions">
             <div className="preference-actions">
@@ -189,7 +195,16 @@ function App() {
           </div>
         </header>
         <main className="main-content">
-          {explorer.selectedID ? (
+          {activePage === "overview" ? (
+            <section className="overview-page">
+              <div className="overview-page-heading">
+                <span className="eyebrow">{t("operations")}</span>
+                <h2>{t("traceHealth")}</h2>
+                <p>{t("inspectHealth")}</p>
+              </div>
+              {explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
+            </section>
+          ) : explorer.selectedID ? (
             <TraceDetail
               selectedID={explorer.selectedID}
               selected={explorer.selected}

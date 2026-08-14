@@ -1,6 +1,5 @@
 import { usePreferences, type TranslationKey } from "../i18n";
 import type { User, Workspace } from "../types";
-import { MetricsOverview } from "./MetricsOverview";
 import { UserMenu } from "./UserMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
@@ -13,16 +12,20 @@ type AppSidebarProps = {
   onLogout: () => void;
   collapsed: boolean;
   onToggle: () => void;
-  metrics: import("../types").DashboardMetrics | null;
+  activePage: "overview" | "traces";
+  onPageChange: (page: "overview" | "traces") => void;
 };
 
-type NavItem = { icon: string; label: TranslationKey; active?: boolean };
+type NavItem = { icon: string; label: TranslationKey; page: "overview" | "traces" };
 type NavGroup = { label: TranslationKey; items: NavItem[] };
 
 const groups: NavGroup[] = [
   {
     label: "observability",
-    items: [{ icon: "⌘", label: "trace", active: true }],
+    items: [
+      { icon: "◒", label: "overview", page: "overview" },
+      { icon: "⌘", label: "trace", page: "traces" },
+    ],
   },
 ] as const;
 
@@ -35,7 +38,8 @@ export function AppSidebar({
   onLogout,
   collapsed,
   onToggle,
-  metrics,
+  activePage,
+  onPageChange,
 }: AppSidebarProps) {
   const { t } = usePreferences();
 
@@ -60,8 +64,9 @@ export function AppSidebar({
             <span className="sidebar-nav-label">{t(group.label)}</span>
             {group.items.map((item) => (
               <button
-                className={`sidebar-nav-item ${item.active ? "active" : ""}`}
+                className={`sidebar-nav-item ${activePage === item.page ? "active" : ""}`}
                 key={item.label}
+                onClick={() => onPageChange(item.page)}
               >
                 <span className="sidebar-nav-icon">{item.icon}</span>
                 <span>{t(item.label)}</span>
@@ -70,7 +75,6 @@ export function AppSidebar({
           </div>
         ))}
       </nav>
-      {metrics && <MetricsOverview metrics={metrics} compact />}
       <div className="sidebar-user">
         <UserMenu user={user} onLogout={onLogout} />
       </div>

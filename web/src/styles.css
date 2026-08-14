@@ -1994,6 +1994,31 @@ footer {
   border-radius: 8px;
   min-height: 560px;
 }
+.overview-page {
+  min-height: 560px;
+}
+.overview-page-heading {
+  border-bottom: 1px solid #1b2d47;
+  margin-bottom: 22px;
+  padding: 4px 0 20px;
+}
+.overview-page-heading h2 {
+  font-size: 24px;
+  margin: 4px 0 8px;
+}
+.overview-page-heading p {
+  color: #8295b1;
+  font-size: 12px;
+}
+.overview-page > .overview-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+[data-theme="light"] .overview-page-heading {
+  border-color: #dce5f0;
+}
+[data-theme="light"] .overview-page-heading p {
+  color: #657792;
+}
 .main-content > .list-panel .toolbar {
   grid-template-columns: minmax(180px, 1fr) 130px 120px 145px 145px;
 }
