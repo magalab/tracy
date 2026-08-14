@@ -18,6 +18,7 @@ function App() {
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft>({
     key: "quality",
     score: "1",
@@ -79,17 +80,23 @@ function App() {
         </div>
       </header>
       <main className="main-content">
-        <section className="overview-header">
+        <section className={`overview-header ${overviewOpen ? "expanded" : "collapsed"}`}>
           <div>
             <span className="eyebrow">{t("operations")}</span>
             <h2>{t("traceHealth")}</h2>
             <p>{t("inspectHealth")}</p>
           </div>
-          <div className="live-indicator">
-            <span className="live-dot" /> {t("liveStore")}
+          <div className="overview-actions">
+            <div className="live-indicator">
+              <span className="live-dot" /> {t("liveStore")}
+            </div>
+            <button className="overview-toggle" onClick={() => setOverviewOpen((open) => !open)}>
+              {overviewOpen ? t("hideOverview") : t("showOverview")}
+              <span>{overviewOpen ? "↑" : "↓"}</span>
+            </button>
           </div>
         </section>
-        {explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
+        {overviewOpen && explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
         <section className="workspace">
           <TraceList
             traces={explorer.page.items}
