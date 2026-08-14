@@ -70,4 +70,18 @@ func TestTraceSummaryAndFilters(t *testing.T) {
 	if len(metrics.UsageBreakdown) != 2 || metrics.UsageBreakdown[0].Key != "tool" {
 		t.Fatalf("usage metrics=%+v", metrics.UsageBreakdown)
 	}
+	emptyPage, err := store.ListTraces(ctx, domain.Query{ProjectID: "empty-project"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if emptyPage.Items == nil {
+		t.Fatal("empty trace page must encode items as [] rather than null")
+	}
+	emptyMetrics, err := store.Metrics(ctx, domain.MetricsQuery{ProjectID: "empty-project", StartTime: base, EndTime: base.Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if emptyMetrics.UsageBreakdown == nil {
+		t.Fatal("empty metrics must encode usage_breakdown as [] rather than null")
+	}
 }

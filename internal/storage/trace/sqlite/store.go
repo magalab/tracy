@@ -151,7 +151,7 @@ func (s *Store) ListTraces(ctx context.Context, q domain.Query) (domain.Page, er
 		return domain.Page{}, err
 	}
 	defer rows.Close()
-	page := domain.Page{}
+	page := domain.Page{Items: make([]domain.Summary, 0)}
 	for rows.Next() {
 		var item domain.Summary
 		var start, end sql.NullInt64
@@ -190,7 +190,7 @@ func (s *Store) Metrics(ctx context.Context, q domain.MetricsQuery) (domain.Metr
 	if end.Before(start) {
 		return domain.Metrics{}, fmt.Errorf("end_time must be after start_time")
 	}
-	metrics := domain.Metrics{ProjectID: q.ProjectID, StartTime: start.UTC(), EndTime: end.UTC()}
+	metrics := domain.Metrics{ProjectID: q.ProjectID, StartTime: start.UTC(), EndTime: end.UTC(), UsageBreakdown: make([]domain.UsageBreakdown, 0)}
 	var requestCount, errorCount, inputTokens, outputTokens int64
 	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='error' THEN 1 ELSE 0 END),0), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0) FROM trace_summaries WHERE project_id=? AND start_time>=? AND start_time<=?`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro()).Scan(&requestCount, &errorCount, &inputTokens, &outputTokens); err != nil {
 		return domain.Metrics{}, err
