@@ -2095,6 +2095,83 @@ footer {
   position: static;
   width: 280px;
 }
+.trace-filter-select .semi-select-selection,
+.trace-filter-date .semi-input-wrapper,
+.workspace-menu-create .semi-input-wrapper {
+  background: #101a2d;
+  border: 1px solid #263753;
+  border-radius: 7px;
+  box-shadow: none;
+  color: #dce7fb;
+  min-height: 42px;
+}
+.trace-filter-select {
+  height: 42px;
+}
+.trace-filter-select .semi-select-selection:hover,
+.trace-filter-date .semi-input-wrapper:hover,
+.workspace-menu-create .semi-input-wrapper:hover {
+  border-color: #4d6e9d;
+}
+.trace-filter-select .semi-select-selection:focus-within,
+.trace-filter-date .semi-input-wrapper-focus,
+.workspace-menu-create .semi-input-wrapper-focus {
+  border-color: #70a7ff;
+  box-shadow: 0 0 0 2px #4c85e31c;
+}
+.trace-filter-select .semi-select-content-wrapper,
+.trace-filter-select .semi-select-selection-text,
+.trace-filter-date .semi-input,
+.workspace-menu-create .semi-input {
+  color: #dce7fb;
+}
+.trace-filter-select .semi-select-selection-placeholder,
+.trace-filter-date .semi-input::placeholder,
+.workspace-menu-create .semi-input::placeholder {
+  color: #687994;
+}
+.trace-filter-select .semi-select-arrow,
+.trace-filter-date .semi-input-suffix,
+.workspace-menu-create .semi-input-suffix {
+  color: #8fa5c3;
+}
+.workspace-menu-create .semi-button {
+  min-height: 42px;
+  min-width: 42px;
+}
+.workspace-menu-create > div .semi-input-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+[data-theme="light"] .trace-filter-select .semi-select-selection,
+[data-theme="light"] .trace-filter-date .semi-input-wrapper,
+[data-theme="light"] .workspace-menu-create .semi-input-wrapper {
+  background: #f7f9fc;
+  border-color: #cbd8e8;
+  color: #243652;
+}
+[data-theme="light"] .trace-filter-select .semi-select-selection:focus-within,
+[data-theme="light"] .trace-filter-date .semi-input-wrapper-focus,
+[data-theme="light"] .workspace-menu-create .semi-input-wrapper-focus {
+  border-color: #6c95cf;
+  box-shadow: 0 0 0 2px #6c95cf22;
+}
+[data-theme="light"] .trace-filter-select .semi-select-content-wrapper,
+[data-theme="light"] .trace-filter-select .semi-select-selection-text,
+[data-theme="light"] .trace-filter-date .semi-input,
+[data-theme="light"] .workspace-menu-create .semi-input {
+  color: #243652;
+}
+[data-theme="light"] .trace-filter-select .semi-select-selection-placeholder,
+[data-theme="light"] .trace-filter-date .semi-input::placeholder,
+[data-theme="light"] .workspace-menu-create .semi-input::placeholder {
+  color: #657792;
+}
+[data-theme="light"] .trace-filter-select .semi-select-arrow,
+[data-theme="light"] .trace-filter-date .semi-input-suffix,
+[data-theme="light"] .workspace-menu-create .semi-input-suffix {
+  color: #536987;
+}
 .main-content > .list-panel .trace-row {
   align-items: center;
   grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) auto;
