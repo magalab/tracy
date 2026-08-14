@@ -220,6 +220,43 @@ func (s *Store) FirstWorkspaceForUser(ctx context.Context, userID string) (Proje
 	}
 	return project, err
 }
+
+func (s *Store) ListWorkspacesForUser(ctx context.Context, userID string) ([]Project, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT p.id,p.name,p.created_at,p.updated_at FROM projects p JOIN workspace_members m ON m.workspace_id=p.id WHERE m.user_id=? ORDER BY p.created_at,p.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	workspaces := make([]Project, 0)
+	for rows.Next() {
+		var workspace Project
+		var created, updated int64
+		if err := rows.Scan(&workspace.ID, &workspace.Name, &created, &updated); err != nil {
+			return nil, err
+		}
+		workspace.CreatedAt = time.UnixMicro(created).UTC()
+		workspace.UpdatedAt = time.UnixMicro(updated).UTC()
+		workspaces = append(workspaces, workspace)
+	}
+	return workspaces, rows.Err()
+}
+
+func (s *Store) UserCanAccessWorkspace(ctx context.Context, userID, workspaceID string) error {
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM workspace_members WHERE user_id=? AND workspace_id=?`, userID, workspaceID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) SwitchSessionWorkspace(ctx context.Context, tokenHash, userID, workspaceID string) error {
+	if err := s.UserCanAccessWorkspace(ctx, userID, workspaceID); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE user_sessions SET workspace_id=? WHERE token_hash=? AND user_id=?`, workspaceID, tokenHash, userID)
+	return err
+}
 func (s *Store) CreateAPIKey(ctx context.Context, k APIKey) error {
 	if k.Role == "" {
 		k.Role = "project"

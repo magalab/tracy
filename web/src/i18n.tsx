@@ -83,6 +83,13 @@ const messages = {
     email: "Email",
     password: "Password",
     close: "Close",
+    loading: "Loading…",
+    selfHosted: "SELF-HOSTED OBSERVABILITY",
+    welcomeBack: "Welcome back",
+    workspaceLabel: "WORKSPACE",
+    chooseWorkspace: "Choose a workspace",
+    workspaceName: "Workspace name",
+    createWorkspace: "Create workspace",
   },
   zh: {
     brandEyebrow: "自托管可观测性",
@@ -162,6 +169,13 @@ const messages = {
     email: "邮箱",
     password: "密码",
     close: "关闭",
+    loading: "加载中…",
+    selfHosted: "自托管可观测性",
+    welcomeBack: "欢迎回来",
+    workspaceLabel: "WORKSPACE",
+    chooseWorkspace: "选择 Workspace",
+    workspaceName: "Workspace 名称",
+    createWorkspace: "创建 Workspace",
   },
 } as const;
 

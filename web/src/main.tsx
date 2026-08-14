@@ -1,32 +1,43 @@
-import { StrictMode, useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { AuthControl } from "./components/AuthControl";
 import { AnnotationDraft } from "./components/AnnotationPanel";
+import { LoginPage } from "./components/LoginPage";
 import { MetricsOverview } from "./components/MetricsOverview";
 import { TraceDetail } from "./components/TraceDetail";
 import { TraceList } from "./components/TraceList";
+import { UserMenu } from "./components/UserMenu";
+import { WorkspacePicker } from "./components/WorkspacePicker";
+import {
+  getCurrentUser,
+  listWorkspaces,
+  login as loginRequest,
+  createWorkspace,
+  switchWorkspace,
+} from "./api/client";
 import { useTraceExplorer } from "./hooks/useTraceExplorer";
 import { PreferencesProvider, usePreferences } from "./i18n";
+import type { User, Workspace } from "./types";
 import "./styles.css";
 
-const tokenKey = "tracy.api_token";
 const sessionKey = "tracy.session_token";
 const userKey = "tracy.user";
 
 function App() {
   const { language, theme, t, toggleLanguage, toggleTheme } = usePreferences();
-  const [token, setToken] = useState(
-    () => localStorage.getItem(sessionKey) ?? localStorage.getItem(tokenKey) ?? "",
-  );
-  const [user, setUser] = useState<{ name: string; email: string } | null>(() => {
+  const [token, setToken] = useState(() => localStorage.getItem(sessionKey) ?? "");
+  const [user, setUser] = useState<User | null>(() => {
     const raw = localStorage.getItem(userKey);
     if (!raw) return null;
     try {
-      return JSON.parse(raw) as { name: string; email: string };
+      return JSON.parse(raw) as User;
     } catch {
       return null;
     }
   });
+  const [authReady, setAuthReady] = useState(false);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeWorkspaceID, setActiveWorkspaceID] = useState("");
+  const [workspacesReady, setWorkspacesReady] = useState(false);
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
@@ -39,18 +50,44 @@ function App() {
   });
   const explorer = useTraceExplorer(token, statusFilter, kindFilter);
 
+  useEffect(() => {
+    if (!token) {
+      setUser(null);
+      setAuthReady(true);
+      setWorkspacesReady(true);
+      return;
+    }
+    void getCurrentUser(token)
+      .then((data) => {
+        setUser(data.user);
+        setAuthReady(true);
+      })
+      .catch(() => {
+        localStorage.removeItem(sessionKey);
+        localStorage.removeItem(userKey);
+        setToken("");
+        setAuthReady(true);
+      });
+  }, [token]);
+
+  useEffect(() => {
+    if (!user || !token) return;
+    setWorkspacesReady(false);
+    void listWorkspaces(token)
+      .then((data) => {
+        setWorkspaces(data.items);
+        setActiveWorkspaceID(data.active_id);
+      })
+      .finally(() => setWorkspacesReady(true));
+  }, [token, user]);
+
   async function login(email: string, password: string) {
-    const response = await fetch("/api/v1/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message ?? `Login failed (${response.status})`);
+    const data = await loginRequest(email, password);
     localStorage.setItem(sessionKey, data.access_token);
     localStorage.setItem(userKey, JSON.stringify(data.user));
     setToken(data.access_token);
     setUser(data.user);
+    setAuthReady(true);
   }
 
   function logout() {
@@ -58,6 +95,21 @@ function App() {
     localStorage.removeItem(userKey);
     setToken("");
     setUser(null);
+    setWorkspaces([]);
+    setActiveWorkspaceID("");
+  }
+
+  async function createUserWorkspace(name: string) {
+    const data = await createWorkspace(token, name);
+    setWorkspaces((items) => [...items, data.workspace]);
+    setActiveWorkspaceID(data.active_id);
+  }
+
+  async function selectWorkspace(id: string) {
+    await switchWorkspace(token, id);
+    setActiveWorkspaceID(id);
+    void explorer.loadPage();
+    void explorer.loadMetrics();
   }
 
   function clearFilters() {
@@ -74,6 +126,22 @@ function App() {
       comment: annotationDraft.comment,
     });
     setAnnotationDraft((draft) => ({ ...draft, label: "", comment: "" }));
+  }
+
+  const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceID);
+
+  if (!authReady) return <div className="page-loading">{t("loading")}</div>;
+  if (!user) return <LoginPage onLogin={login} />;
+  if (!workspacesReady) return <div className="page-loading">{t("loading")}</div>;
+  if (!activeWorkspace) {
+    return (
+      <WorkspacePicker
+        workspaces={workspaces}
+        activeID={activeWorkspaceID}
+        onSelect={selectWorkspace}
+        onCreate={createUserWorkspace}
+      />
+    );
   }
 
   return (
@@ -96,7 +164,7 @@ function App() {
               {theme === "dark" ? "☼" : "☾"}
             </button>
           </div>
-          <AuthControl user={user} onLogin={login} onLogout={logout} />
+          <UserMenu user={user} workspace={activeWorkspace} onLogout={logout} />
         </div>
       </header>
       <main className="main-content">

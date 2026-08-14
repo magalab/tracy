@@ -46,3 +46,12 @@ export type DashboardMetrics = {
   p95_latency_ms: number;
   usage_breakdown?: { key: string; span_count: number }[];
 };
+
+export type Workspace = {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type User = { id: string; email: string; name: string };

@@ -49,6 +49,45 @@ paths:
           description: Current user and active Workspace.
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /api/v1/workspaces:
+    get:
+      operationId: listWorkspaces
+      responses:
+        '200':
+          description: Workspaces available to the current user.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createWorkspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 128 }
+      responses:
+        '201':
+          description: Workspace created and activated for the current session.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/workspaces/{workspaceID}/switch:
+    post:
+      operationId: switchWorkspace
+      parameters:
+        - name: workspaceID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Workspace activated for the current session.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: User is not a member of the workspace.
   /api/v1/ingest:
     post:
       operationId: ingestSpans

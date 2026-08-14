@@ -22,6 +22,8 @@ Default API Key 是兼容用的 admin key，可以创建 Workspace 和 workspace
 
 Web 用户通过 `POST /api/v1/auth/login` 登录，服务创建 24 小时的有状态 User Session；当前 Session 绑定一个 Workspace。`GET /api/v1/auth/me` 返回当前用户和 Workspace。SDK、CozeLoop ingest 和其他机器调用继续使用 Workspace API Key / PAT；两者不能混淆。首次启动会创建 `TRACY_ADMIN_EMAIL` / `TRACY_ADMIN_PASSWORD` 对应的 owner 用户；未配置密码时生成随机密码并写入启动日志。
 
+Web 登录后可以通过 `GET /api/v1/workspaces` 查看成员可访问的 Workspace，使用 `POST /api/v1/workspaces` 创建 Workspace，使用 `POST /api/v1/workspaces/{workspaceID}/switch` 切换当前 Session。未登录的 Web 页面不会读取旧 API Key，也不会请求 Trace 数据。
+
 JWT OAuth Compatibility 使用 metadata DB 的 `oauth_apps` 和 `oauth_access_tokens` 表。Admin 通过 `/api/v1/oauth/apps` 注册 `client_id`、Workspace、`public_key_id` 和 RSA PEM 公钥；`/api/permission/oauth2/token` 使用 `golang-jwt/jwt` 校验 Bearer JWT 的 RS256 签名及 `iss`、`aud`、`kid`、`iat`、`exp`、`jti` 后签发短期 workspace-scoped access token。JWT audience 必须等于客户端请求的 API host，access token 继续复用现有 `Authorization: Bearer` 认证链路。
 
 Annotation 存在 metadata DB 中，但所有查询都带当前 API Key 的 ProjectID。Annotation 的 `key` 必填，score 范围为 0 到 1；Trace Explorer 会在详情页加载、创建和删除 Annotation。

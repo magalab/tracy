@@ -65,6 +65,125 @@ h1 span {
   height: 34px;
   width: 34px;
 }
+.page-loading,
+.auth-page,
+.workspace-page {
+  align-items: center;
+  background: radial-gradient(circle at 50% 0%, #152748 0, transparent 48%), #080d18;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+.page-loading {
+  color: #8195b4;
+  font-size: 13px;
+}
+.auth-card,
+.workspace-card {
+  background: #0d1829;
+  border: 1px solid #263f62;
+  border-radius: 16px;
+  box-shadow: 0 24px 80px #0000003d;
+  max-width: 420px;
+  padding: 34px;
+  width: 100%;
+}
+.auth-brand-mark {
+  display: block;
+  height: 48px;
+  margin-bottom: 26px;
+  width: 48px;
+}
+.auth-card h1,
+.workspace-card h1 {
+  color: #eef4fd;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+  margin: 8px 0;
+}
+.auth-card p {
+  color: #8094b2;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 22px;
+}
+.auth-card input {
+  display: block;
+  margin-top: 9px;
+  width: 100%;
+}
+.auth-card > button {
+  margin-top: 14px;
+  width: 100%;
+}
+.auth-error {
+  color: #ff9ba0;
+  font-size: 12px;
+  margin-top: 10px;
+}
+.workspace-card {
+  max-width: 560px;
+}
+.workspace-list {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0 14px;
+}
+.workspace-option {
+  align-items: center;
+  background: #101d31;
+  border: 1px solid #263b5b;
+  color: #dce7f9;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto 1fr auto;
+  padding: 10px 12px;
+  text-align: left;
+}
+.workspace-option:hover,
+.workspace-option.active {
+  background: #142844;
+  border-color: #5e8fc9;
+  filter: none;
+}
+.workspace-option > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.workspace-option b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workspace-option small {
+  color: #7187a6;
+  font-family: ui-monospace, monospace;
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.workspace-icon {
+  align-items: center;
+  background: #315b8f;
+  border-radius: 8px;
+  color: #eaf2ff;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  width: 30px;
+}
+.workspace-create {
+  border-top: 1px solid #203450;
+  display: flex;
+  gap: 8px;
+  padding-top: 18px;
+}
+.workspace-create input {
+  flex: 1;
+  min-width: 0;
+}
 h2 {
   font-size: 17px;
   letter-spacing: -0.01em;
@@ -1083,6 +1202,40 @@ footer {
 [data-theme="light"] .topbar {
   background: #ffffffdd;
   border-color: #d7e0ed;
+}
+[data-theme="light"] .page-loading,
+[data-theme="light"] .auth-page,
+[data-theme="light"] .workspace-page {
+  background: radial-gradient(circle at 50% 0%, #dbeafe 0, transparent 48%), #f3f6fb;
+}
+[data-theme="light"] .auth-card,
+[data-theme="light"] .workspace-card {
+  background: #ffffff;
+  border-color: #d1deec;
+  box-shadow: 0 24px 80px #38547a1a;
+}
+[data-theme="light"] .auth-card h1,
+[data-theme="light"] .workspace-card h1 {
+  color: #1b2a40;
+}
+[data-theme="light"] .auth-card p {
+  color: #657792;
+}
+[data-theme="light"] .workspace-option {
+  background: #f7f9fc;
+  border-color: #d1deec;
+  color: #243652;
+}
+[data-theme="light"] .workspace-option:hover,
+[data-theme="light"] .workspace-option.active {
+  background: #eaf2fc;
+  border-color: #8aadd7;
+}
+[data-theme="light"] .workspace-option small {
+  color: #657792;
+}
+[data-theme="light"] .workspace-create {
+  border-color: #dce5f0;
 }
 [data-theme="light"] h1,
 [data-theme="light"] h2,

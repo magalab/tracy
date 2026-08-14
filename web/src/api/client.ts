@@ -1,4 +1,4 @@
-import type { Annotation, DashboardMetrics, Page, Span } from "../types";
+import type { Annotation, DashboardMetrics, Page, Span, User, Workspace } from "../types";
 
 export async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -52,4 +52,40 @@ export function deleteAnnotation(id: string, token: string) {
   return request<void>(`/api/v1/annotations/${encodeURIComponent(id)}`, token, {
     method: "DELETE",
   });
+}
+
+export async function login(email: string, password: string) {
+  return request<{ access_token: string; user: User; workspace: Workspace }>(
+    "/api/v1/auth/login",
+    "",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    },
+  );
+}
+
+export function getCurrentUser(token: string) {
+  return request<{ user: User; workspace: Workspace }>("/api/v1/auth/me", token);
+}
+
+export function listWorkspaces(token: string) {
+  return request<{ items: Workspace[]; active_id: string }>("/api/v1/workspaces", token);
+}
+
+export function createWorkspace(token: string, name: string) {
+  return request<{ workspace: Workspace; active_id: string }>("/api/v1/workspaces", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function switchWorkspace(token: string, id: string) {
+  return request<{ workspace: Workspace; active_id: string }>(
+    `/api/v1/workspaces/${encodeURIComponent(id)}/switch`,
+    token,
+    { method: "POST" },
+  );
 }
