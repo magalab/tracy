@@ -384,6 +384,25 @@ small {
 .trace-row > .status-dot {
   justify-self: center;
 }
+.trace-status-dot {
+  align-self: start;
+  background: #73d2a8;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #73d2a81a;
+  display: block;
+  height: 10px;
+  justify-self: center;
+  margin-top: 4px;
+  max-height: 10px;
+  max-width: 10px;
+  min-height: 10px;
+  min-width: 10px;
+  width: 10px;
+}
+.trace-status-dot.error {
+  background: #ff7d85;
+  box-shadow: 0 0 0 3px #ff7d851a;
+}
 .pill {
   color: #a9c4ed;
   background: #142440;

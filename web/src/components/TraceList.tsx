@@ -115,7 +115,7 @@ export function TraceList({
             aria-label={`${t("openTrace")} ${trace.trace_id}`}
             onClick={() => onOpen(trace.trace_id)}
           >
-            <span className={`status-dot ${trace.status}`} />
+            <span className={`trace-status-dot ${trace.status}`} aria-hidden="true" />
             <span className="trace-main">
               <div className="trace-title">
                 <strong>{trace.trace_id}</strong>
