@@ -57,6 +57,7 @@ func ensureDefault(ctx context.Context, s *meta.Store, logger *slog.Logger) {
 	_, err := s.Project(ctx, "default")
 	if err == nil {
 		must(logger, s.EnsureAdmin(ctx, "default-key"))
+		ensureDefaultUser(ctx, s, logger)
 		return
 	}
 	if !errors.Is(err, meta.ErrNotFound) {
@@ -72,6 +73,32 @@ func ensureDefault(ctx context.Context, s *meta.Store, logger *slog.Logger) {
 		logger.Info("created initial API key; store it securely", "api_key", token)
 	}
 	must(logger, s.CreateAPIKey(ctx, meta.APIKey{ID: "default-key", ProjectID: "default", Name: "Default API Key", Role: "admin", TokenHash: meta.HashToken(token)}))
+	ensureDefaultUser(ctx, s, logger)
+}
+
+func ensureDefaultUser(ctx context.Context, s *meta.Store, logger *slog.Logger) {
+	email := os.Getenv("TRACY_ADMIN_EMAIL")
+	if email == "" {
+		email = "admin@localhost"
+	}
+	if user, err := s.UserByEmail(ctx, email); err == nil {
+		must(logger, s.AddWorkspaceMember(ctx, meta.WorkspaceMember{WorkspaceID: "default", UserID: user.ID, Role: "owner", CreatedAt: time.Now().UTC()}))
+		return
+	} else if !errors.Is(err, meta.ErrNotFound) {
+		must(logger, err)
+	}
+	password := os.Getenv("TRACY_ADMIN_PASSWORD")
+	if password == "" {
+		var b [18]byte
+		must(logger, func() error { _, e := rand.Read(b[:]); return e }())
+		password = hex.EncodeToString(b[:])
+		logger.Info("created initial user; store credentials securely", "email", email, "password", password)
+	}
+	hash, err := meta.HashPassword(password)
+	must(logger, err)
+	now := time.Now().UTC()
+	must(logger, s.CreateUser(ctx, meta.User{ID: "default-user", Email: email, Name: "Admin", PasswordHash: hash, CreatedAt: now}))
+	must(logger, s.AddWorkspaceMember(ctx, meta.WorkspaceMember{WorkspaceID: "default", UserID: "default-user", Role: "owner", CreatedAt: now}))
 }
 func must(logger *slog.Logger, err error) {
 	if err != nil {

@@ -22,6 +22,33 @@ paths:
       responses:
         '200':
           description: Service is ready.
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: User session and the user's active Workspace.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/me:
+    get:
+      operationId: currentUser
+      responses:
+        '200':
+          description: Current user and active Workspace.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /api/v1/ingest:
     post:
       operationId: ingestSpans

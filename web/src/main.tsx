@@ -1,8 +1,8 @@
 import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { AuthControl } from "./components/AuthControl";
 import { AnnotationDraft } from "./components/AnnotationPanel";
 import { MetricsOverview } from "./components/MetricsOverview";
-import { TokenForm } from "./components/TokenForm";
 import { TraceDetail } from "./components/TraceDetail";
 import { TraceList } from "./components/TraceList";
 import { useTraceExplorer } from "./hooks/useTraceExplorer";
@@ -10,11 +10,23 @@ import { PreferencesProvider, usePreferences } from "./i18n";
 import "./styles.css";
 
 const tokenKey = "tracy.api_token";
+const sessionKey = "tracy.session_token";
+const userKey = "tracy.user";
 
 function App() {
   const { language, theme, t, toggleLanguage, toggleTheme } = usePreferences();
-  const [token, setToken] = useState(() => localStorage.getItem(tokenKey) ?? "");
-  const [draftToken, setDraftToken] = useState(token);
+  const [token, setToken] = useState(
+    () => localStorage.getItem(sessionKey) ?? localStorage.getItem(tokenKey) ?? "",
+  );
+  const [user, setUser] = useState<{ name: string; email: string } | null>(() => {
+    const raw = localStorage.getItem(userKey);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as { name: string; email: string };
+    } catch {
+      return null;
+    }
+  });
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
@@ -27,9 +39,25 @@ function App() {
   });
   const explorer = useTraceExplorer(token, statusFilter, kindFilter);
 
-  function saveToken() {
-    localStorage.setItem(tokenKey, draftToken);
-    setToken(draftToken);
+  async function login(email: string, password: string) {
+    const response = await fetch("/api/v1/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message ?? `Login failed (${response.status})`);
+    localStorage.setItem(sessionKey, data.access_token);
+    localStorage.setItem(userKey, JSON.stringify(data.user));
+    setToken(data.access_token);
+    setUser(data.user);
+  }
+
+  function logout() {
+    localStorage.removeItem(sessionKey);
+    localStorage.removeItem(userKey);
+    setToken("");
+    setUser(null);
   }
 
   function clearFilters() {
@@ -68,12 +96,7 @@ function App() {
               {theme === "dark" ? "☼" : "☾"}
             </button>
           </div>
-          <TokenForm
-            value={draftToken}
-            connected={Boolean(token)}
-            onChange={setDraftToken}
-            onSave={saveToken}
-          />
+          <AuthControl user={user} onLogin={login} onLogout={logout} />
         </div>
       </header>
       <main className="main-content">

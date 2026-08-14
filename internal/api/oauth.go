@@ -1,20 +1,16 @@
 package api
 
 import (
-	"crypto"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/panda/tracy/internal/storage/meta"
 )
 
@@ -146,95 +142,27 @@ func parseRSAPublicKey(raw string) (*rsa.PublicKey, error) {
 }
 
 func verifyJWT(raw string, app meta.OAuthApp, audience string, now time.Time) error {
-	parts := strings.Split(raw, ".")
-	if len(parts) != 3 {
-		return errors.New("malformed JWT")
-	}
-	decode := func(value string, target any) error {
-		data, err := base64.RawURLEncoding.DecodeString(value)
-		if err != nil {
-			return err
-		}
-		return json.Unmarshal(data, target)
-	}
-	var header struct {
-		Algorithm string `json:"alg"`
-		KeyID     string `json:"kid"`
-	}
-	if err := decode(parts[0], &header); err != nil || header.Algorithm != "RS256" || header.KeyID != app.PublicKeyID {
-		return errors.New("JWT header is invalid")
-	}
-	var claims map[string]json.RawMessage
-	if err := decode(parts[1], &claims); err != nil {
-		return errors.New("JWT claims are invalid")
-	}
-	stringClaim := func(name string) (string, error) {
-		var value string
-		if err := json.Unmarshal(claims[name], &value); err != nil || value == "" {
-			return "", fmt.Errorf("JWT claim %s is invalid", name)
-		}
-		return value, nil
-	}
-	issuer, err := stringClaim("iss")
-	if err != nil || issuer != app.ClientID {
-		return errors.New("JWT issuer is invalid")
-	}
-	issuedAt, err := numericClaim(claims, "iat")
-	if err != nil || issuedAt > now.Add(60*time.Second).Unix() {
-		return errors.New("JWT issued-at is invalid")
-	}
-	expiresAt, err := numericClaim(claims, "exp")
-	if err != nil || expiresAt <= now.Unix() {
-		return errors.New("JWT is expired")
-	}
-	if _, err := stringClaim("jti"); err != nil {
-		return err
-	}
-	if !audienceClaimMatches(claims["aud"], audience) {
-		return errors.New("JWT audience is invalid")
-	}
 	publicKey, err := parseRSAPublicKey(app.PublicKey)
 	if err != nil {
 		return errors.New("OAuth app public key is invalid")
 	}
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return errors.New("JWT signature is invalid")
+	claims := &jwt.RegisteredClaims{}
+	token, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
+		if token.Method != jwt.SigningMethodRS256 {
+			return nil, errors.New("JWT algorithm is invalid")
+		}
+		if keyID, ok := token.Header["kid"].(string); !ok || keyID != app.PublicKeyID {
+			return nil, errors.New("JWT key id is invalid")
+		}
+		return publicKey, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}), jwt.WithIssuer(app.ClientID), jwt.WithAudience(audience), jwt.WithLeeway(60*time.Second), jwt.WithTimeFunc(func() time.Time { return now }))
+	if err != nil || !token.Valid {
+		return errors.New("JWT validation failed")
 	}
-	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
-	if err := rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, digest[:], signature); err != nil {
-		return errors.New("JWT signature verification failed")
+	if claims.ID == "" {
+		return errors.New("JWT claim jti is invalid")
 	}
 	return nil
-}
-
-func numericClaim(claims map[string]json.RawMessage, name string) (int64, error) {
-	var raw json.Number
-	if err := json.Unmarshal(claims[name], &raw); err != nil {
-		return 0, fmt.Errorf("JWT claim %s is invalid", name)
-	}
-	value, err := strconv.ParseInt(string(raw), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("JWT claim %s is invalid", name)
-	}
-	return value, nil
-}
-
-func audienceClaimMatches(raw json.RawMessage, audience string) bool {
-	var single string
-	if json.Unmarshal(raw, &single) == nil {
-		return single == audience
-	}
-	var many []string
-	if json.Unmarshal(raw, &many) != nil {
-		return false
-	}
-	for _, item := range many {
-		if item == audience {
-			return true
-		}
-	}
-	return false
 }
 
 func oauthError(w http.ResponseWriter, status int, code, description string) {

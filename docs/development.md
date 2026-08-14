@@ -2,7 +2,7 @@
 
 ## 边界
 
-`internal/storage/meta` 只负责 Project 和 API Key；`internal/storage/trace` 只负责 Span。HTTP DTO 通过 `internal/trace` domain model 进入存储，CozeLoop 兼容代码应放在 `compat/cozeloop`。
+`internal/storage/meta` 负责 Workspace（当前数据库仍沿用 `projects` 表名）、User、Workspace Member、Session 和 API Key；`internal/storage/trace` 只负责 Span。HTTP DTO 通过 `internal/trace` domain model 进入存储，CozeLoop 兼容代码应放在 `compat/cozeloop`。
 
 服务使用两个独立 SQLite 文件：`meta.db` 和 `traces.db`。两者不做跨库事务，Project 权限由 API 层和 Service 层保证。
 
@@ -18,9 +18,11 @@ Span 校验限制单个 input/output 为 1 MiB、attributes 为 256 KiB / 128 �
 
 Dashboard 使用 `GET /api/v1/dashboard`，默认聚合最近 24 小时，也支持 RFC3339 的 `start_time` / `end_time`。请求量、错误率、Token 和延迟分位数从 `trace_summaries` 聚合，span kind 用量从 spans 聚合；查询始终绑定认证 Key 的 ProjectID。
 
-Default API Key 是 admin key，可以创建 Project 和 project-scoped API Key。新 Key 的明文 token 只在创建响应中返回一次；数据库只存 token hash。撤销通过 `POST /api/v1/keys/{keyID}/revoke` 完成。
+Default API Key 是兼容用的 admin key，可以创建 Workspace 和 workspace-scoped API Key。新 Key 的明文 token 只在创建响应中返回一次；数据库只存 token hash。撤销通过 `POST /api/v1/keys/{keyID}/revoke` 完成。
 
-JWT OAuth Compatibility 使用 metadata DB 的 `oauth_apps` 和 `oauth_access_tokens` 表。Admin 通过 `/api/v1/oauth/apps` 注册 `client_id`、Project、`public_key_id` 和 RSA PEM 公钥；`/api/permission/oauth2/token` 校验 Bearer JWT 的 RS256 签名及 `iss`、`aud`、`kid`、`iat`、`exp`、`jti` 后签发短期 project-scoped access token。JWT audience 必须等于客户端请求的 API host，access token 继续复用现有 `Authorization: Bearer` 认证链路。
+Web 用户通过 `POST /api/v1/auth/login` 登录，服务创建 24 小时的有状态 User Session；当前 Session 绑定一个 Workspace。`GET /api/v1/auth/me` 返回当前用户和 Workspace。SDK、CozeLoop ingest 和其他机器调用继续使用 Workspace API Key / PAT；两者不能混淆。首次启动会创建 `TRACY_ADMIN_EMAIL` / `TRACY_ADMIN_PASSWORD` 对应的 owner 用户；未配置密码时生成随机密码并写入启动日志。
+
+JWT OAuth Compatibility 使用 metadata DB 的 `oauth_apps` 和 `oauth_access_tokens` 表。Admin 通过 `/api/v1/oauth/apps` 注册 `client_id`、Workspace、`public_key_id` 和 RSA PEM 公钥；`/api/permission/oauth2/token` 使用 `golang-jwt/jwt` 校验 Bearer JWT 的 RS256 签名及 `iss`、`aud`、`kid`、`iat`、`exp`、`jti` 后签发短期 workspace-scoped access token。JWT audience 必须等于客户端请求的 API host，access token 继续复用现有 `Authorization: Bearer` 认证链路。
 
 Annotation 存在 metadata DB 中，但所有查询都带当前 API Key 的 ProjectID。Annotation 的 `key` 必填，score 范围为 0 到 1；Trace Explorer 会在详情页加载、创建和删除 Annotation。
 
