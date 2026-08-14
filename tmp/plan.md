@@ -34,8 +34,8 @@ npm run build
 下一阶段：
 
 ```text
-□ 持续写入 + 并发查询的完整 SQLite 性能基线（当前已有可复现 harness，待记录多规模结果）
-□ DuckDB/VictoriaTraces 仅在 benchmark 证明必要后评估
+✓ SQLite 1M/10M 多规模性能基线（当前 workload 下暂不需要 DuckDB）
+□ DuckDB/VictoriaTraces 仅在出现明确容量或查询瓶颈后评估
 ```
 
 ## 1. 项目目标

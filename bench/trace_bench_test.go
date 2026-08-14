@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
+	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -78,7 +80,8 @@ func TestWorkloadSmoke(t *testing.T) {
 	if err != nil || count < 1 {
 		t.Fatalf("invalid TRACY_BENCH_SPANS=%q", raw)
 	}
-	db, err := sqlite.Open(context.Background(), t.TempDir()+"/traces.db")
+	dbPath := t.TempDir() + "/traces.db"
+	db, err := sqlite.Open(context.Background(), dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +101,34 @@ func TestWorkloadSmoke(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Logf("appended %d spans in %s (%0.1f spans/sec)", count, time.Since(start), float64(count)/time.Since(start).Seconds())
+	ingestDuration := time.Since(start)
+	querySamples := make([]int64, 0, 100)
+	for i := 0; i < 100; i++ {
+		sampleStart := time.Now()
+		if _, err := store.ListTraces(context.Background(), domain.Query{ProjectID: "bench", Limit: 50}); err != nil {
+			t.Fatal(err)
+		}
+		querySamples = append(querySamples, time.Since(sampleStart).Nanoseconds())
+	}
+	sort.Slice(querySamples, func(i, j int) bool { return querySamples[i] < querySamples[j] })
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	dbSize, walSize := fileSize(dbPath), fileSize(dbPath+"-wal")
+	t.Logf("spans=%d ingest=%s ingest_rate=%0.1f spans/sec list_p50=%s list_p95=%s list_p99=%s db=%s wal=%s alloc=%d sys=%d", count, ingestDuration, float64(count)/ingestDuration.Seconds(), time.Duration(percentile(querySamples, .50)), time.Duration(percentile(querySamples, .95)), time.Duration(percentile(querySamples, .99)), humanBytes(dbSize), humanBytes(walSize), mem.Alloc, mem.Sys)
+}
+
+func fileSize(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	return info.Size()
+}
+func humanBytes(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%dB", size)
+	}
+	return fmt.Sprintf("%.2fMiB", float64(size)/(1024*1024))
 }
 
 func makeSpans(count, offset int) []domain.Span {
