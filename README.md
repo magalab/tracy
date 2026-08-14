@@ -38,7 +38,7 @@ curl http://localhost:8080/api/v1/traces/trace-1 \
   -H 'Authorization: Bearer tr_dev_key'
 ```
 
-查询 Trace 列表（支持 `status`、`kind`、`name`、`trace_id`、`limit` 和不透明 `cursor`）：
+查询 Trace 列表（支持 `status`、`kind`、`name`、`trace_id`、`start_time`、`end_time`、`min_duration_ms`、`max_duration_ms`、`min_tokens`、`max_tokens`、`limit` 和不透明 `cursor`）：
 
 ```bash
 curl 'http://localhost:8080/api/v1/traces?limit=20&status=ok' \

@@ -342,6 +342,36 @@ func (s *Server) listTraces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := domain.Query{ProjectID: key.ProjectID, Status: r.URL.Query().Get("status"), Kind: r.URL.Query().Get("kind"), Name: r.URL.Query().Get("name"), TraceID: r.URL.Query().Get("trace_id"), Cursor: r.URL.Query().Get("cursor")}
+	for name, target := range map[string]**time.Time{"start_time": &q.StartTime, "end_time": &q.EndTime} {
+		if raw := r.URL.Query().Get(name); raw != "" {
+			parsed, parseErr := time.Parse(time.RFC3339, raw)
+			if parseErr != nil {
+				errorJSON(w, http.StatusBadRequest, "invalid_"+name, name+" must be RFC3339")
+				return
+			}
+			*target = &parsed
+		}
+	}
+	for name, target := range map[string]*time.Duration{"min_duration_ms": &q.MinDuration, "max_duration_ms": &q.MaxDuration} {
+		if raw := r.URL.Query().Get(name); raw != "" {
+			value, parseErr := strconv.ParseInt(raw, 10, 64)
+			if parseErr != nil || value < 0 {
+				errorJSON(w, http.StatusBadRequest, "invalid_"+name, name+" must be a non-negative integer")
+				return
+			}
+			*target = time.Duration(value) * time.Millisecond
+		}
+	}
+	for name, target := range map[string]*int64{"min_tokens": &q.MinTokens, "max_tokens": &q.MaxTokens} {
+		if raw := r.URL.Query().Get(name); raw != "" {
+			value, parseErr := strconv.ParseInt(raw, 10, 64)
+			if parseErr != nil || value < 0 {
+				errorJSON(w, http.StatusBadRequest, "invalid_"+name, name+" must be a non-negative integer")
+				return
+			}
+			*target = value
+		}
+	}
 	if raw := r.URL.Query().Get("limit"); raw != "" {
 		q.Limit, err = strconv.Atoi(raw)
 		if err != nil || q.Limit < 1 || q.Limit > 100 {

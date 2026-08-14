@@ -69,6 +69,9 @@ func (s Span) Validate() error {
 
 type Query struct {
 	ProjectID, TraceID, Status, Kind, Name string
+	StartTime, EndTime                     *time.Time
+	MinDuration, MaxDuration               time.Duration
+	MinTokens, MaxTokens                   int64
 	Limit                                  int
 	Cursor                                 string
 }

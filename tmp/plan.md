@@ -17,6 +17,7 @@
 ✓ SQLite benchmark harness 和基础 workload
 ✓ payload 大小校验、writer 重试和 ingest stats
 ✓ admin Project/API Key 管理与 revoke
+✓ trace_summaries 物化摘要和时间/duration/token 查询过滤
 ✓ README、AGENTS.md、开发说明和 contract test 基础
 ```
 
@@ -33,7 +34,7 @@ npm run build
 下一阶段：
 
 ```text
-□ 持续写入 + 并发查询的完整 SQLite 性能基线
+□ 持续写入 + 并发查询的完整 SQLite 性能基线（当前已有可复现 harness，待记录多规模结果）
 □ DuckDB/VictoriaTraces 仅在 benchmark 证明必要后评估
 ```
 
