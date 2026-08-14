@@ -282,13 +282,27 @@ small {
   border-left: 1px solid #253753;
   padding-left: 18px;
 }
+.span-tree-node {
+  position: relative;
+}
 .span-card {
   background: #0e1829;
   border: 1px solid #1e304c;
   border-radius: 8px;
   padding: 14px 16px;
   margin-bottom: 12px;
+  margin-left: calc(var(--tree-depth, 0) * 24px);
   box-shadow: 0 8px 24px #00000014;
+  position: relative;
+}
+.span-card.nested::before {
+  background: #355176;
+  content: "";
+  height: 1px;
+  left: -25px;
+  position: absolute;
+  top: 25px;
+  width: 19px;
 }
 .span-line {
   display: flex;
