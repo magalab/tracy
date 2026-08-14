@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -175,6 +176,88 @@ func (s *Store) ListTraces(ctx context.Context, q domain.Query) (domain.Page, er
 		page.NextCursor = encodeCursor(last.StartTime.UnixMicro(), last.TraceID)
 	}
 	return page, nil
+}
+
+func (s *Store) Metrics(ctx context.Context, q domain.MetricsQuery) (domain.Metrics, error) {
+	end := q.EndTime
+	if end.IsZero() {
+		end = time.Now().UTC()
+	}
+	start := q.StartTime
+	if start.IsZero() {
+		start = end.Add(-24 * time.Hour)
+	}
+	if end.Before(start) {
+		return domain.Metrics{}, fmt.Errorf("end_time must be after start_time")
+	}
+	metrics := domain.Metrics{ProjectID: q.ProjectID, StartTime: start.UTC(), EndTime: end.UTC()}
+	var requestCount, errorCount, inputTokens, outputTokens int64
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='error' THEN 1 ELSE 0 END),0), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0) FROM trace_summaries WHERE project_id=? AND start_time>=? AND start_time<=?`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro()).Scan(&requestCount, &errorCount, &inputTokens, &outputTokens); err != nil {
+		return domain.Metrics{}, err
+	}
+	metrics.RequestCount, metrics.ErrorCount = requestCount, errorCount
+	metrics.InputTokens, metrics.OutputTokens = inputTokens, outputTokens
+	if requestCount > 0 {
+		metrics.ErrorRate = float64(errorCount) / float64(requestCount)
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT end_time - start_time FROM trace_summaries WHERE project_id=? AND start_time>=? AND start_time<=? ORDER BY end_time - start_time`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro())
+	if err != nil {
+		return domain.Metrics{}, err
+	}
+	var latencies []float64
+	for rows.Next() {
+		var micros int64
+		if err := rows.Scan(&micros); err != nil {
+			rows.Close()
+			return domain.Metrics{}, err
+		}
+		latencies = append(latencies, float64(micros)/1000)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return domain.Metrics{}, err
+	}
+	rows.Close()
+	if len(latencies) > 0 {
+		var total float64
+		for _, latency := range latencies {
+			total += latency
+		}
+		metrics.AvgLatencyMS = total / float64(len(latencies))
+		metrics.P50LatencyMS = percentile(latencies, 0.50)
+		metrics.P95LatencyMS = percentile(latencies, 0.95)
+		metrics.P99LatencyMS = percentile(latencies, 0.99)
+	}
+	usageRows, err := s.db.QueryContext(ctx, `SELECT span_kind, COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0) FROM spans WHERE project_id=? AND start_time>=? AND start_time<=? GROUP BY span_kind ORDER BY COUNT(*) DESC, span_kind LIMIT 20`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro())
+	if err != nil {
+		return domain.Metrics{}, err
+	}
+	defer usageRows.Close()
+	for usageRows.Next() {
+		var item domain.UsageBreakdown
+		if err := usageRows.Scan(&item.Key, &item.SpanCount, &item.InputTokens, &item.OutputTokens); err != nil {
+			return domain.Metrics{}, err
+		}
+		if item.Key == "" {
+			item.Key = "custom"
+		}
+		metrics.UsageBreakdown = append(metrics.UsageBreakdown, item)
+	}
+	return metrics, usageRows.Err()
+}
+
+func percentile(values []float64, ratio float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	index := int(math.Ceil(float64(len(values))*ratio)) - 1
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(values) {
+		index = len(values) - 1
+	}
+	return values[index]
 }
 
 func encodeCursor(start int64, traceID string) string {

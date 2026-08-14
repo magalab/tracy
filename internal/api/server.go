@@ -26,6 +26,7 @@ type Server struct {
 	traces interface {
 		GetTrace(ctx context.Context, projectID, traceID string) ([]domain.Span, error)
 		ListTraces(ctx context.Context, query domain.Query) (domain.Page, error)
+		Metrics(ctx context.Context, query domain.MetricsQuery) (domain.Metrics, error)
 	}
 	logger *slog.Logger
 }
@@ -33,6 +34,7 @@ type Server struct {
 func NewServer(m *meta.Store, w *ingest.Writer, t interface {
 	GetTrace(context.Context, string, string) ([]domain.Span, error)
 	ListTraces(context.Context, domain.Query) (domain.Page, error)
+	Metrics(context.Context, domain.MetricsQuery) (domain.Metrics, error)
 }, logger *slog.Logger) *Server {
 	return &Server{meta: m, writer: w, traces: t, logger: logger}
 }
@@ -45,6 +47,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/loop/traces/ingest", s.cozeLoopIngest)
 	mux.HandleFunc("GET /api/v1/traces/", s.getTrace)
 	mux.HandleFunc("GET /api/v1/traces", s.listTraces)
+	mux.HandleFunc("GET /api/v1/dashboard", s.dashboard)
 	mux.HandleFunc("GET /api/v1/traces/{traceID}/annotations", s.listAnnotations)
 	mux.HandleFunc("POST /api/v1/traces/{traceID}/annotations", s.createAnnotation)
 	mux.HandleFunc("DELETE /api/v1/annotations/{annotationID}", s.deleteAnnotation)
@@ -486,6 +489,31 @@ func (s *Server) listTraces(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+	key, err := s.authenticate(r)
+	if err != nil {
+		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
+		return
+	}
+	q := domain.MetricsQuery{ProjectID: key.ProjectID}
+	for name, target := range map[string]*time.Time{"start_time": &q.StartTime, "end_time": &q.EndTime} {
+		if raw := r.URL.Query().Get(name); raw != "" {
+			parsed, parseErr := time.Parse(time.RFC3339, raw)
+			if parseErr != nil {
+				errorJSON(w, http.StatusBadRequest, "invalid_"+name, name+" must be RFC3339")
+				return
+			}
+			*target = parsed
+		}
+	}
+	metrics, err := s.traces.Metrics(r.Context(), q)
+	if err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_query", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, metrics)
 }
 func (s *Server) authenticate(r *http.Request) (meta.APIKey, error) {
 	h := r.Header.Get("Authorization")

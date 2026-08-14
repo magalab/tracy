@@ -19,6 +19,7 @@
 ✓ admin Project/API Key 管理与 revoke
 ✓ trace_summaries 物化摘要和时间/duration/token 查询过滤
 ✓ Feedback/Annotation API、Project 隔离和 Trace Explorer 展示
+✓ Dashboard API、24 小时默认时间范围、请求/错误/Token/延迟/用量指标和前端概览卡片
 ✓ README、AGENTS.md、开发说明和 contract test 基础
 ```
 
@@ -36,6 +37,7 @@ npm run build
 
 ```text
 ✓ SQLite 1M/10M 多规模性能基线（当前 workload 下暂不需要 DuckDB）
+✓ Dashboard Phase 13（当前用 span kind 作为用量分组维度）
 □ DuckDB/VictoriaTraces 仅在出现明确容量或查询瓶颈后评估
 ```
 
@@ -1191,6 +1193,17 @@ SQLite 和 DuckDB/Victoria 各自实现最适合自己的查询方式。
 
 API 不暴露数据库细节。
 
+当前实现补充约束：
+
+```text
+默认时间范围：最近 24 小时
+显式时间范围：start_time/end_time，RFC3339
+聚合粒度：trace_summaries；用量分组暂按 span kind
+权限边界：始终按当前 API Key 的 project_id 过滤
+```
+
+下一步进入 Phase 14：先稳定 Token API，再实现 CozeLoop JWT OAuth Compatibility。
+
 ---
 
 ## 20. Phase 14：JWT OAuth Compatibility
@@ -1466,6 +1479,10 @@ API Key → ingest span → SQLite → GetTrace
 26 reproducible SQLite benchmark harness
 27 benchmark + optimize SQLite
 28 decide whether DuckDB implementation is necessary
+29 Dashboard metrics API and Trace Explorer overview
+30 Dashboard time-range and Project-isolation contract tests
+31 stabilize API Token behavior
+32 CozeLoop JWT OAuth compatibility
 ```
 
 第 28 步之前不要实现 DuckDB / VictoriaTraces。

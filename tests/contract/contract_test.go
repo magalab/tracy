@@ -76,6 +76,25 @@ func TestHTTPContract(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	dashboardReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/dashboard?start_time=2025-12-31T00:00:00Z&end_time=2026-01-02T00:00:00Z", nil)
+	dashboardReq.Header.Set("Authorization", "Bearer "+key)
+	dashboardResp, err := http.DefaultClient.Do(dashboardReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dashboardResp.StatusCode != http.StatusOK {
+		t.Fatalf("dashboard status=%d", dashboardResp.StatusCode)
+	}
+	var dashboard struct {
+		RequestCount int64 `json:"request_count"`
+	}
+	if err := json.NewDecoder(dashboardResp.Body).Decode(&dashboard); err != nil {
+		t.Fatal(err)
+	}
+	_ = dashboardResp.Body.Close()
+	if dashboard.RequestCount < 1 {
+		t.Fatalf("dashboard request count=%d", dashboard.RequestCount)
+	}
 	annotationBody, _ := json.Marshal(map[string]any{"key": "quality", "score": 0.9, "label": "good", "comment": "contract annotation"})
 	annotationReq, _ := http.NewRequest(http.MethodPost, base+"/api/v1/traces/contract-trace/annotations", bytes.NewReader(annotationBody))
 	annotationReq.Header.Set("Authorization", "Bearer "+key)

@@ -25,6 +25,9 @@ func (f *fakeStore) GetTrace(context.Context, string, string) ([]domain.Span, er
 func (f *fakeStore) ListTraces(context.Context, domain.Query) (domain.Page, error) {
 	return domain.Page{}, nil
 }
+func (f *fakeStore) Metrics(context.Context, domain.MetricsQuery) (domain.Metrics, error) {
+	return domain.Metrics{}, nil
+}
 
 func TestEnqueueRejectsWholeBatchWhenFull(t *testing.T) {
 	store := &fakeStore{}

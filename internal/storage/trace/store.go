@@ -13,4 +13,5 @@ type Store interface {
 	Append(ctx context.Context, spans []domain.Span) error
 	GetTrace(ctx context.Context, projectID, traceID string) ([]domain.Span, error)
 	ListTraces(ctx context.Context, query domain.Query) (domain.Page, error)
+	Metrics(ctx context.Context, query domain.MetricsQuery) (domain.Metrics, error)
 }

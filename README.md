@@ -45,12 +45,20 @@ curl 'http://localhost:8080/api/v1/traces?limit=20&status=ok' \
   -H 'Authorization: Bearer tr_dev_key'
 ```
 
+查询 Dashboard 指标（默认最近 24 小时，也可传 `start_time` / `end_time` RFC3339）：
+
+```bash
+curl http://localhost:8080/api/v1/dashboard \
+  -H 'Authorization: Bearer tr_dev_key'
+```
+
 ## HTTP contract
 
 - `GET /healthz` 和 `GET /readyz` 返回 200。
 - `POST /api/v1/ingest` 接受 `{ "spans": [...] }`，成功返回 `202`，表示数据已进入内存队列。
 - `POST /v1/loop/traces/ingest` 接受官方 CozeLoop Go SDK 的 `{ "spans": [...] }` payload，成功返回 `{"code":0,"msg":""}`。
 - `GET /api/v1/traces` 返回当前 Project 的 Trace 列表；`GET /api/v1/traces/{trace_id}` 返回单个 Trace。
+- `GET /api/v1/dashboard` 返回当前 Project 的请求量、错误率、Token 汇总、延迟分位数和按 span kind 的用量分布。
 - `/` 和其它前端路径返回嵌入式 React Trace Explorer。
 - Admin API Key 可调用 `GET /api/v1/projects`、`POST /api/v1/projects`、项目 Key 列表/创建和 `POST /api/v1/keys/{id}/revoke`。
 - Admin API Key 调用 `GET /api/v1/ingest/stats` 可查看 accepted、written、dropped、queue depth 和 write errors。

@@ -91,3 +91,32 @@ type Page struct {
 	Items      []Summary `json:"items"`
 	NextCursor string    `json:"next_cursor,omitempty"`
 }
+
+type MetricsQuery struct {
+	ProjectID string
+	StartTime time.Time
+	EndTime   time.Time
+}
+
+type UsageBreakdown struct {
+	Key          string `json:"key"`
+	SpanCount    int64  `json:"span_count"`
+	InputTokens  int64  `json:"input_tokens"`
+	OutputTokens int64  `json:"output_tokens"`
+}
+
+type Metrics struct {
+	ProjectID      string           `json:"project_id"`
+	StartTime      time.Time        `json:"start_time"`
+	EndTime        time.Time        `json:"end_time"`
+	RequestCount   int64            `json:"request_count"`
+	ErrorCount     int64            `json:"error_count"`
+	ErrorRate      float64          `json:"error_rate"`
+	InputTokens    int64            `json:"input_tokens"`
+	OutputTokens   int64            `json:"output_tokens"`
+	AvgLatencyMS   float64          `json:"avg_latency_ms"`
+	P50LatencyMS   float64          `json:"p50_latency_ms"`
+	P95LatencyMS   float64          `json:"p95_latency_ms"`
+	P99LatencyMS   float64          `json:"p99_latency_ms"`
+	UsageBreakdown []UsageBreakdown `json:"usage_breakdown"`
+}

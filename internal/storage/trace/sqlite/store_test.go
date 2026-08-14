@@ -57,4 +57,17 @@ func TestTraceSummaryAndFilters(t *testing.T) {
 	if len(page.Items) != 1 || page.Items[0].Status != "error" || page.Items[0].SpanCount != 2 {
 		t.Fatalf("updated summary=%+v", page)
 	}
+	metrics, err := store.Metrics(ctx, domain.MetricsQuery{ProjectID: "p", StartTime: base.Add(-time.Minute), EndTime: base.Add(2 * time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.RequestCount != 2 || metrics.ErrorCount != 2 || metrics.InputTokens != 23 || metrics.OutputTokens != 3 || metrics.ErrorRate != 1 {
+		t.Fatalf("metrics=%+v", metrics)
+	}
+	if metrics.P50LatencyMS != 2 || metrics.P95LatencyMS != 5 || metrics.P99LatencyMS != 5 {
+		t.Fatalf("latency metrics=%+v", metrics)
+	}
+	if len(metrics.UsageBreakdown) != 2 || metrics.UsageBreakdown[0].Key != "tool" {
+		t.Fatalf("usage metrics=%+v", metrics.UsageBreakdown)
+	}
 }
