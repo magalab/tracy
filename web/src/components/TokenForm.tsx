@@ -15,7 +15,6 @@ export function TokenForm({ value, connected, onChange, onSave }: TokenFormProps
         <span className="token-state-dot" />
         <span>
           <b>{connected ? t("connected") : t("connectProject")}</b>
-          <small>{connected ? t("apiKeyActive") : t("enterApiKey")}</small>
         </span>
       </div>
       <input

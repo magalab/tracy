@@ -61,9 +61,13 @@ function App() {
             <button className="preference-button" onClick={toggleLanguage}>
               {language === "en" ? "中" : "EN"}
             </button>
-            <button className="preference-button" onClick={toggleTheme}>
+            <button
+              className="preference-button"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? t("theme") : t("darkTheme")}
+              title={theme === "dark" ? t("theme") : t("darkTheme")}
+            >
               {theme === "dark" ? "☼" : "☾"}
-              <span>{theme === "dark" ? t("theme") : t("darkTheme")}</span>
             </button>
           </div>
           <TokenForm

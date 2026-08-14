@@ -71,32 +71,27 @@ label {
 }
 .token-form {
   align-items: center;
-  background: #0e192b;
-  border: 1px solid #243a5a;
-  border-radius: 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   display: flex;
   gap: 10px;
-  padding: 5px;
+  padding: 0;
 }
 .token-state {
   align-items: center;
+  background: #101c30;
+  border: 1px solid #243b5d;
+  border-radius: 8px;
   display: flex;
   gap: 8px;
-  padding: 0 5px 0 8px;
+  min-height: 42px;
+  padding: 0 12px;
   white-space: nowrap;
-}
-.token-state > span:last-child {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 .token-state b {
   color: #dbe7f9;
   font-size: 11px;
-}
-.token-state small {
-  color: #7489a8;
-  font-size: 9px;
 }
 .token-state-dot {
   background: #ffc179;
@@ -124,9 +119,12 @@ label {
   border: 1px solid transparent;
   color: #8fa5c3;
   display: inline-flex;
-  font-size: 11px;
+  font-size: 16px;
   gap: 5px;
-  padding: 8px 7px;
+  height: 36px;
+  justify-content: center;
+  padding: 6px 8px;
+  width: 36px;
 }
 .preference-button:hover {
   background: #121f34;
@@ -150,7 +148,7 @@ input:focus {
   border-color: #1f3452;
   border-radius: 6px;
   font-size: 12px;
-  width: 220px;
+  width: 190px;
 }
 .token-form button {
   border-radius: 6px;
@@ -918,11 +916,14 @@ footer {
 }
 [data-theme="light"] input,
 [data-theme="light"] select,
-[data-theme="light"] .search-field,
-[data-theme="light"] .token-form {
+[data-theme="light"] .search-field {
   background: #f7f9fc;
   border-color: #cbd8e8;
   color: #243652;
+}
+[data-theme="light"] .token-state {
+  background: #ffffff;
+  border-color: #cbd8e8;
 }
 [data-theme="light"] .token-form input {
   background: #ffffff;
