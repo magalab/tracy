@@ -81,20 +81,26 @@ export function TraceList({
           <option value="ok">{t("healthyStatus")}</option>
           <option value="error">{t("errors")}</option>
         </select>
-        <input
-          aria-label={t("startDate")}
-          className="date-filter"
-          type="date"
-          value={startDate}
-          onChange={(event) => onStartDateChange(event.target.value)}
-        />
-        <input
-          aria-label={t("endDate")}
-          className="date-filter"
-          type="date"
-          value={endDate}
-          onChange={(event) => onEndDateChange(event.target.value)}
-        />
+        <label className="date-filter">
+          <span>{t("startDate")}</span>
+          <input
+            aria-label={t("startDate")}
+            type="date"
+            value={startDate}
+            onClick={(event) => event.currentTarget.showPicker?.()}
+            onChange={(event) => onStartDateChange(event.target.value)}
+          />
+        </label>
+        <label className="date-filter">
+          <span>{t("endDate")}</span>
+          <input
+            aria-label={t("endDate")}
+            type="date"
+            value={endDate}
+            onClick={(event) => event.currentTarget.showPicker?.()}
+            onChange={(event) => onEndDateChange(event.target.value)}
+          />
+        </label>
         <select
           aria-label="Filter by kind"
           value={kindFilter}
@@ -161,7 +167,6 @@ export function TraceList({
                 ).toFixed(0)}
                 ms
               </b>
-              <small>{t("openTrace")}&nbsp; →</small>
             </span>
           </button>
         ))}
