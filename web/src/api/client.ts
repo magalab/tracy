@@ -15,12 +15,20 @@ export async function request<T>(path: string, token: string, init?: RequestInit
 
 export function listTraces(
   token: string,
-  options: { cursor?: string; status?: string; kind?: string },
+  options: {
+    cursor?: string;
+    status?: string;
+    kind?: string;
+    startTime?: string;
+    endTime?: string;
+  },
 ) {
   const params = new URLSearchParams({ limit: "50" });
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.status) params.set("status", options.status);
   if (options.kind) params.set("kind", options.kind);
+  if (options.startTime) params.set("start_time", options.startTime);
+  if (options.endTime) params.set("end_time", options.endTime);
   return request<Page>(`/api/v1/traces?${params.toString()}`, token);
 }
 

@@ -7,6 +7,8 @@ type TraceListProps = {
   filter: string;
   statusFilter: string;
   kindFilter: string;
+  startDate: string;
+  endDate: string;
   loading: boolean;
   token: string;
   error: string;
@@ -14,6 +16,8 @@ type TraceListProps = {
   onFilterChange: (value: string) => void;
   onStatusChange: (value: string) => void;
   onKindChange: (value: string) => void;
+  onStartDateChange: (value: string) => void;
+  onEndDateChange: (value: string) => void;
   onOpen: (id: string) => void;
   onRefresh: () => void;
   onLoadMore: (cursor: string) => void;
@@ -26,6 +30,8 @@ export function TraceList({
   filter,
   statusFilter,
   kindFilter,
+  startDate,
+  endDate,
   loading,
   token,
   error,
@@ -33,6 +39,8 @@ export function TraceList({
   onFilterChange,
   onStatusChange,
   onKindChange,
+  onStartDateChange,
+  onEndDateChange,
   onOpen,
   onRefresh,
   onLoadMore,
@@ -73,6 +81,20 @@ export function TraceList({
           <option value="ok">{t("healthyStatus")}</option>
           <option value="error">{t("errors")}</option>
         </select>
+        <input
+          aria-label={t("startDate")}
+          className="date-filter"
+          type="date"
+          value={startDate}
+          onChange={(event) => onStartDateChange(event.target.value)}
+        />
+        <input
+          aria-label={t("endDate")}
+          className="date-filter"
+          type="date"
+          value={endDate}
+          onChange={(event) => onEndDateChange(event.target.value)}
+        />
         <select
           aria-label="Filter by kind"
           value={kindFilter}

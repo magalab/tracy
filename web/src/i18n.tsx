@@ -103,6 +103,8 @@ const messages = {
     spanID: "Span ID",
     duration: "Duration",
     startTime: "Start time",
+    startDate: "Start date",
+    endDate: "End date",
   },
   zh: {
     brandEyebrow: "自托管可观测性",
@@ -202,6 +204,8 @@ const messages = {
     spanID: "Span ID",
     duration: "耗时",
     startTime: "开始时间",
+    startDate: "开始日期",
+    endDate: "结束日期",
   },
 } as const;
 

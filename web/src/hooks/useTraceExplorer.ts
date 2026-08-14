@@ -8,7 +8,13 @@ import {
 } from "../api/client";
 import type { Annotation, DashboardMetrics, Page, Span } from "../types";
 
-export function useTraceExplorer(token: string, statusFilter: string, kindFilter: string) {
+export function useTraceExplorer(
+  token: string,
+  statusFilter: string,
+  kindFilter: string,
+  startTime: string,
+  endTime: string,
+) {
   const [page, setPage] = useState<Page>({ items: [] });
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [selected, setSelected] = useState<Span[]>([]);
@@ -28,6 +34,8 @@ export function useTraceExplorer(token: string, statusFilter: string, kindFilter
           cursor: nextCursor,
           status: statusFilter,
           kind: kindFilter,
+          startTime,
+          endTime,
         });
         setPage({ ...next, items: next.items ?? [] });
         setCursor(next.next_cursor);
@@ -37,7 +45,7 @@ export function useTraceExplorer(token: string, statusFilter: string, kindFilter
         setLoading(false);
       }
     },
-    [kindFilter, statusFilter, token],
+    [endTime, kindFilter, startTime, statusFilter, token],
   );
 
   const loadMetrics = useCallback(async () => {

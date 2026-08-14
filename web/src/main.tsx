@@ -40,6 +40,8 @@ function App() {
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft>({
     key: "quality",
@@ -47,7 +49,13 @@ function App() {
     label: "",
     comment: "",
   });
-  const explorer = useTraceExplorer(token, statusFilter, kindFilter);
+  const explorer = useTraceExplorer(
+    token,
+    statusFilter,
+    kindFilter,
+    startDate ? new Date(`${startDate}T00:00:00`).toISOString() : "",
+    endDate ? new Date(`${endDate}T23:59:59.999`).toISOString() : "",
+  );
 
   useEffect(() => {
     if (!token) {
@@ -115,6 +123,8 @@ function App() {
     setFilter("");
     setStatusFilter("");
     setKindFilter("");
+    setStartDate("");
+    setEndDate("");
   }
 
   function addAnnotation() {
@@ -197,6 +207,8 @@ function App() {
               filter={filter}
               statusFilter={statusFilter}
               kindFilter={kindFilter}
+              startDate={startDate}
+              endDate={endDate}
               loading={explorer.loading}
               token={token}
               error={explorer.error}
@@ -204,6 +216,8 @@ function App() {
               onFilterChange={setFilter}
               onStatusChange={setStatusFilter}
               onKindChange={setKindFilter}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
               onOpen={(id) => void explorer.openTrace(id)}
               onRefresh={() => {
                 void explorer.loadPage();
