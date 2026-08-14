@@ -533,7 +533,7 @@ input {
 }
 input:focus {
   border-color: #70a7ff;
-  box-shadow: 0 0 0 3px #4c85e322;
+  box-shadow: 0 0 0 2px #4c85e31c;
 }
 .token-form input {
   background: #091321;
@@ -903,8 +903,8 @@ select {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid #87b5ff;
-  outline-offset: 2px;
+  outline: 1px solid #87b5ff;
+  outline-offset: 1px;
 }
 button:active {
   transform: translateY(1px);
