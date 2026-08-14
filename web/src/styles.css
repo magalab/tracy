@@ -70,8 +70,44 @@ label {
   margin-bottom: 5px;
 }
 .token-form {
+  align-items: center;
+  background: #0e192b;
+  border: 1px solid #243a5a;
+  border-radius: 10px;
+  display: flex;
+  gap: 10px;
+  padding: 5px;
+}
+.token-state {
+  align-items: center;
   display: flex;
   gap: 8px;
+  padding: 0 5px 0 8px;
+  white-space: nowrap;
+}
+.token-state > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.token-state b {
+  color: #dbe7f9;
+  font-size: 11px;
+}
+.token-state small {
+  color: #7489a8;
+  font-size: 9px;
+}
+.token-state-dot {
+  background: #ffc179;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px #ffc1791c;
+  height: 7px;
+  width: 7px;
+}
+.token-form.connected .token-state-dot {
+  background: #73d2a8;
+  box-shadow: 0 0 0 3px #73d2a81c;
 }
 input {
   color: #dce7fb;
@@ -86,7 +122,16 @@ input:focus {
   box-shadow: 0 0 0 3px #4c85e322;
 }
 .token-form input {
-  width: 230px;
+  background: #091321;
+  border-color: #1f3452;
+  border-radius: 6px;
+  font-size: 12px;
+  width: 220px;
+}
+.token-form button {
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 9px 12px;
 }
 button {
   border: 0;
@@ -575,16 +620,17 @@ select {
   border: 1px solid #1a2b44;
   border-radius: 12px;
   box-shadow: 0 24px 70px #00000026;
+  grid-template-columns: minmax(320px, 34%) minmax(0, 1fr);
   min-height: 640px;
   overflow: hidden;
 }
 .list-panel {
   background: #0b1321;
-  padding: 25px 24px 34px;
+  padding: 25px 20px 34px;
 }
 .detail-panel {
   background: #09111e;
-  padding: 25px 28px 34px;
+  padding: 25px 30px 34px;
 }
 .panel-heading {
   align-items: center;

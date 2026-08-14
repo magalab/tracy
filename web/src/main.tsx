@@ -54,7 +54,12 @@ function App() {
             Tracy <span>Trace Explorer</span>
           </h1>
         </div>
-        <TokenForm value={draftToken} onChange={setDraftToken} onSave={saveToken} />
+        <TokenForm
+          value={draftToken}
+          connected={Boolean(token)}
+          onChange={setDraftToken}
+          onSave={saveToken}
+        />
       </header>
       <main className="main-content">
         <section className="overview-header">
