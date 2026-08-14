@@ -1,12 +1,11 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { AnnotationDraft } from "./components/AnnotationPanel";
+import { AppSidebar } from "./components/AppSidebar";
 import { LoginPage } from "./components/LoginPage";
 import { MetricsOverview } from "./components/MetricsOverview";
 import { TraceDetail } from "./components/TraceDetail";
 import { TraceList } from "./components/TraceList";
-import { UserMenu } from "./components/UserMenu";
-import { WorkspaceMenu } from "./components/WorkspaceMenu";
 import { WorkspacePicker } from "./components/WorkspacePicker";
 import {
   getCurrentUser,
@@ -147,92 +146,97 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-lockup">
-          <img className="brand-mark" src="/tracy.svg" alt="Tracy" />
-        </div>
-        <div className="topbar-actions">
-          <WorkspaceMenu
-            workspaces={workspaces}
-            activeID={activeWorkspaceID}
-            onSelect={selectWorkspace}
-            onCreate={createUserWorkspace}
-          />
-          <div className="preference-actions">
-            <button className="preference-button" onClick={toggleLanguage}>
-              {language === "en" ? "中" : "EN"}
-            </button>
-            <button
-              className="preference-button"
-              onClick={toggleTheme}
-              aria-label={theme === "dark" ? t("theme") : t("darkTheme")}
-              title={theme === "dark" ? t("theme") : t("darkTheme")}
-            >
-              {theme === "dark" ? "☼" : "☾"}
-            </button>
+      <AppSidebar
+        user={user}
+        workspace={activeWorkspace}
+        workspaces={workspaces}
+        activeID={activeWorkspaceID}
+        onSelectWorkspace={selectWorkspace}
+        onCreateWorkspace={createUserWorkspace}
+        onLogout={logout}
+      />
+      <div className="app-main">
+        <header className="topbar">
+          <div className="trace-context">
+            <span className="eyebrow">{t("trace")}</span>
+            <h1>{t("traceExplorer")}</h1>
           </div>
-          <UserMenu user={user} workspace={activeWorkspace} onLogout={logout} />
-        </div>
-      </header>
-      <main className="main-content">
-        <section className={`overview-header ${overviewOpen ? "expanded" : "collapsed"}`}>
-          <div>
-            <span className="eyebrow">{t("operations")}</span>
-            <h2>{t("traceHealth")}</h2>
-            <p>{t("inspectHealth")}</p>
-          </div>
-          <div className="overview-actions">
-            <div className="live-indicator">
-              <span className="live-dot" /> {t("liveStore")}
+          <div className="topbar-actions">
+            <div className="preference-actions">
+              <button className="preference-button" onClick={toggleLanguage}>
+                {language === "en" ? "中" : "EN"}
+              </button>
+              <button
+                className="preference-button"
+                onClick={toggleTheme}
+                aria-label={theme === "dark" ? t("theme") : t("darkTheme")}
+                title={theme === "dark" ? t("theme") : t("darkTheme")}
+              >
+                {theme === "dark" ? "☼" : "☾"}
+              </button>
             </div>
-            <button
-              className="overview-toggle"
-              onClick={() => setOverviewOpen((open) => !open)}
-              aria-label={overviewOpen ? t("hideOverview") : t("showOverview")}
-              title={overviewOpen ? t("hideOverview") : t("showOverview")}
-            >
-              {overviewOpen ? "⌃" : "⌄"}
-            </button>
           </div>
-        </section>
-        {overviewOpen && explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
-        <section className="workspace">
-          <TraceList
-            traces={explorer.page.items}
-            selectedID={explorer.selectedID}
-            filter={filter}
-            statusFilter={statusFilter}
-            kindFilter={kindFilter}
-            loading={explorer.loading}
-            token={token}
-            error={explorer.error}
-            cursor={explorer.cursor}
-            onFilterChange={setFilter}
-            onStatusChange={setStatusFilter}
-            onKindChange={setKindFilter}
-            onOpen={(id) => void explorer.openTrace(id)}
-            onRefresh={() => {
-              void explorer.loadPage();
-              void explorer.loadMetrics();
-            }}
-            onLoadMore={(nextCursor) => void explorer.loadPage(nextCursor)}
-            onClearFilters={clearFilters}
-          />
-          <TraceDetail
-            selectedID={explorer.selectedID}
-            selected={explorer.selected}
-            annotations={explorer.annotations}
-            draft={annotationDraft}
-            onDraftChange={setAnnotationDraft}
-            onAddAnnotation={addAnnotation}
-            onDeleteAnnotation={(id) => void explorer.removeAnnotation(id)}
-          />
-        </section>
-      </main>
-      <footer>
-        <span>{t("localMode")}</span>
-        <span>{t("sqliteStore")}</span>
-      </footer>
+        </header>
+        <main className="main-content">
+          <section className={`overview-header ${overviewOpen ? "expanded" : "collapsed"}`}>
+            <div>
+              <span className="eyebrow">{t("operations")}</span>
+              <h2>{t("traceHealth")}</h2>
+              <p>{t("inspectHealth")}</p>
+            </div>
+            <div className="overview-actions">
+              <div className="live-indicator">
+                <span className="live-dot" /> {t("liveStore")}
+              </div>
+              <button
+                className="overview-toggle"
+                onClick={() => setOverviewOpen((open) => !open)}
+                aria-label={overviewOpen ? t("hideOverview") : t("showOverview")}
+                title={overviewOpen ? t("hideOverview") : t("showOverview")}
+              >
+                {overviewOpen ? "⌃" : "⌄"}
+              </button>
+            </div>
+          </section>
+          {overviewOpen && explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
+          <section className="workspace">
+            <TraceList
+              traces={explorer.page.items}
+              selectedID={explorer.selectedID}
+              filter={filter}
+              statusFilter={statusFilter}
+              kindFilter={kindFilter}
+              loading={explorer.loading}
+              token={token}
+              error={explorer.error}
+              cursor={explorer.cursor}
+              onFilterChange={setFilter}
+              onStatusChange={setStatusFilter}
+              onKindChange={setKindFilter}
+              onOpen={(id) => void explorer.openTrace(id)}
+              onRefresh={() => {
+                void explorer.loadPage();
+                void explorer.loadMetrics();
+              }}
+              onLoadMore={(nextCursor) => void explorer.loadPage(nextCursor)}
+              onClearFilters={clearFilters}
+            />
+            <TraceDetail
+              selectedID={explorer.selectedID}
+              selected={explorer.selected}
+              annotations={explorer.annotations}
+              draft={annotationDraft}
+              onDraftChange={setAnnotationDraft}
+              onAddAnnotation={addAnnotation}
+              onDeleteAnnotation={(id) => void explorer.removeAnnotation(id)}
+            />
+          </section>
+        </main>
+        <footer>
+          <span>{t("localMode")}</span>
+          <span>{t("sqliteStore")}</span>
+        </footer>
+      </div>
     </div>
   );
 }

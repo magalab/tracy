@@ -92,6 +92,22 @@ const messages = {
     createWorkspace: "Create workspace",
     switchWorkspace: "Switch workspace",
     newWorkspace: "New workspace",
+    promptTools: "Prompt tools",
+    promptDevelopment: "Prompt development",
+    playground: "Playground",
+    evaluation: "Evaluation",
+    datasets: "Datasets",
+    evaluators: "Evaluators",
+    experiments: "Experiments",
+    observability: "Observability",
+    trace: "Trace",
+    statistics: "Statistics",
+    automations: "Automations",
+    models: "Models",
+    modelManagement: "Model management",
+    applications: "Applications",
+    appRegistration: "App registration",
+    collapseSidebar: "Collapse sidebar",
   },
   zh: {
     brandEyebrow: "自托管可观测性",
@@ -180,10 +196,26 @@ const messages = {
     createWorkspace: "创建 Workspace",
     switchWorkspace: "切换 Workspace",
     newWorkspace: "新建 Workspace",
+    promptTools: "Prompt 工程",
+    promptDevelopment: "Prompt 开发",
+    playground: "Playground",
+    evaluation: "评测",
+    datasets: "评测集",
+    evaluators: "评估器",
+    experiments: "实验",
+    observability: "观测",
+    trace: "Trace",
+    statistics: "统计",
+    automations: "自动化任务",
+    models: "模型",
+    modelManagement: "模型管理",
+    applications: "应用",
+    appRegistration: "应用注册",
+    collapseSidebar: "收起侧边栏",
   },
 } as const;
 
-type TranslationKey = keyof typeof messages.en;
+export type TranslationKey = keyof typeof messages.en;
 
 type Preferences = {
   language: Language;
