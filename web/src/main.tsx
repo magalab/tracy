@@ -144,7 +144,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}>
       <AppSidebar
         user={user}
         workspaces={workspaces}

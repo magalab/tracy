@@ -1937,6 +1937,15 @@ footer {
   margin-bottom: 5px;
 }
 
+/* Keep the overview and account controls out of the scrollable navigation area. */
+.app-sidebar .sidebar-nav {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.app-sidebar .sidebar-user {
+  margin-top: auto;
+}
+
 /* Trace list is the default page; the detail workbench appears after selection. */
 .app-shell.sidebar-is-collapsed {
   grid-template-columns: 72px minmax(0, 1fr);
