@@ -55,6 +55,7 @@ curl 'http://localhost:8080/api/v1/traces?limit=20&status=ok' \
 - Admin API Key 可调用 `GET /api/v1/projects`、`POST /api/v1/projects`、项目 Key 列表/创建和 `POST /api/v1/keys/{id}/revoke`。
 - Admin API Key 调用 `GET /api/v1/ingest/stats` 可查看 accepted、written、dropped、queue depth 和 write errors。
 - 单个 input/output 最大 1 MiB，attributes 最大 256 KiB / 128 项；超限返回 `413 payload_too_large`。
+- `POST/GET /api/v1/traces/{trace_id}/annotations` 管理当前 Project 的反馈，`DELETE /api/v1/annotations/{id}` 删除反馈。
 - 错误格式固定为 `{ "error": { "code": "...", "message": "..." } }`。
 - API 使用 `Authorization: Bearer <token>`；Key 只绑定一个 Project。
 

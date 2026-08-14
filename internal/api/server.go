@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/panda/tracy/compat/cozeloop"
+	"github.com/panda/tracy/internal/annotation"
 	"github.com/panda/tracy/internal/ingest"
 	"github.com/panda/tracy/internal/storage/meta"
 	domain "github.com/panda/tracy/internal/trace"
@@ -44,6 +45,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/loop/traces/ingest", s.cozeLoopIngest)
 	mux.HandleFunc("GET /api/v1/traces/", s.getTrace)
 	mux.HandleFunc("GET /api/v1/traces", s.listTraces)
+	mux.HandleFunc("GET /api/v1/traces/{traceID}/annotations", s.listAnnotations)
+	mux.HandleFunc("POST /api/v1/traces/{traceID}/annotations", s.createAnnotation)
+	mux.HandleFunc("DELETE /api/v1/annotations/{annotationID}", s.deleteAnnotation)
 	mux.HandleFunc("GET /api/v1/ingest/stats", s.ingestStats)
 	mux.HandleFunc("GET /api/v1/projects", s.listProjects)
 	mux.HandleFunc("POST /api/v1/projects", s.createProject)
@@ -140,6 +144,103 @@ func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.writer.Metrics())
+}
+
+func (s *Server) listAnnotations(w http.ResponseWriter, r *http.Request) {
+	key, traceID, ok := s.annotationContext(w, r)
+	if !ok {
+		return
+	}
+	items, err := s.meta.ListAnnotations(r.Context(), key.ProjectID, traceID)
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list annotations")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+func (s *Server) createAnnotation(w http.ResponseWriter, r *http.Request) {
+	key, traceID, ok := s.annotationContext(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		SpanID  string   `json:"span_id"`
+		Key     string   `json:"key"`
+		Score   *float64 `json:"score"`
+		Label   string   `json:"label"`
+		Comment string   `json:"comment"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 128<<10)).Decode(&body); err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
+		return
+	}
+	body.Key = strings.TrimSpace(body.Key)
+	body.Label = strings.TrimSpace(body.Label)
+	if body.Key == "" || len(body.Key) > 128 {
+		errorJSON(w, http.StatusBadRequest, "invalid_annotation", "key is required and must be at most 128 bytes")
+		return
+	}
+	if len(body.SpanID) > 256 || len(body.Label) > 128 || len(body.Comment) > 64<<10 {
+		errorJSON(w, http.StatusRequestEntityTooLarge, "payload_too_large", "annotation fields exceed configured limits")
+		return
+	}
+	if body.Score != nil && (*body.Score < 0 || *body.Score > 1) {
+		errorJSON(w, http.StatusBadRequest, "invalid_score", "score must be between 0 and 1")
+		return
+	}
+	id, err := randomID("ann_", 12)
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "id_generation_failed", "could not generate annotation id")
+		return
+	}
+	now := time.Now().UTC()
+	item := annotation.Annotation{ID: id, ProjectID: key.ProjectID, TraceID: traceID, SpanID: body.SpanID, Key: body.Key, Score: body.Score, Label: body.Label, Comment: body.Comment, CreatedBy: key.ID, CreatedAt: now, UpdatedAt: now}
+	if err := s.meta.CreateAnnotation(r.Context(), item); err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not save annotation")
+		return
+	}
+	writeJSON(w, http.StatusCreated, item)
+}
+
+func (s *Server) deleteAnnotation(w http.ResponseWriter, r *http.Request) {
+	key, err := s.authenticate(r)
+	if err != nil {
+		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
+		return
+	}
+	if err := s.meta.DeleteAnnotation(r.Context(), key.ProjectID, r.PathValue("annotationID")); err != nil {
+		if errors.Is(err, meta.ErrNotFound) {
+			errorJSON(w, http.StatusNotFound, "annotation_not_found", "annotation was not found")
+			return
+		}
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not delete annotation")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
+}
+
+func (s *Server) annotationContext(w http.ResponseWriter, r *http.Request) (meta.APIKey, string, bool) {
+	key, err := s.authenticate(r)
+	if err != nil {
+		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
+		return meta.APIKey{}, "", false
+	}
+	traceID := r.PathValue("traceID")
+	if traceID == "" {
+		errorJSON(w, http.StatusBadRequest, "invalid_trace_id", "trace id is required")
+		return meta.APIKey{}, "", false
+	}
+	spans, err := s.traces.GetTrace(r.Context(), key.ProjectID, traceID)
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not read trace")
+		return meta.APIKey{}, "", false
+	}
+	if len(spans) == 0 {
+		errorJSON(w, http.StatusNotFound, "trace_not_found", "trace was not found")
+		return meta.APIKey{}, "", false
+	}
+	return key, traceID, true
 }
 
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {

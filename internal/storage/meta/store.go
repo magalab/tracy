@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"time"
+
+	"github.com/panda/tracy/internal/annotation"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -35,6 +37,9 @@ func HashToken(token string) string {
 func (s *Store) Migrate(ctx context.Context) error { return migrate(ctx, s.db) }
 func migrate(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'project', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER); CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash);`); err != nil {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), trace_id TEXT NOT NULL, span_id TEXT NOT NULL DEFAULT '', annotation_key TEXT NOT NULL, score REAL, label TEXT NOT NULL DEFAULT '', comment TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_annotations_project_trace ON annotations(project_id,trace_id,created_at);`); err != nil {
 		return err
 	}
 	var hasRole int
@@ -180,6 +185,52 @@ func (s *Store) ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, er
 
 func (s *Store) RevokeAPIKey(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `UPDATE api_keys SET revoked=1 WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err == nil && count == 0 {
+		return ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) CreateAnnotation(ctx context.Context, item annotation.Annotation) error {
+	var score any
+	if item.Score != nil {
+		score = *item.Score
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO annotations(id,project_id,trace_id,span_id,annotation_key,score,label,comment,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.ProjectID, item.TraceID, item.SpanID, item.Key, score, item.Label, item.Comment, item.CreatedBy, item.CreatedAt.UTC().UnixMicro(), item.UpdatedAt.UTC().UnixMicro())
+	return err
+}
+
+func (s *Store) ListAnnotations(ctx context.Context, projectID, traceID string) ([]annotation.Annotation, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,project_id,trace_id,span_id,annotation_key,score,label,comment,created_by,created_at,updated_at FROM annotations WHERE project_id=? AND trace_id=? ORDER BY created_at,id`, projectID, traceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]annotation.Annotation, 0)
+	for rows.Next() {
+		var item annotation.Annotation
+		var score sql.NullFloat64
+		var created, updated int64
+		if err := rows.Scan(&item.ID, &item.ProjectID, &item.TraceID, &item.SpanID, &item.Key, &score, &item.Label, &item.Comment, &item.CreatedBy, &created, &updated); err != nil {
+			return nil, err
+		}
+		if score.Valid {
+			v := score.Float64
+			item.Score = &v
+		}
+		item.CreatedAt = time.UnixMicro(created).UTC()
+		item.UpdatedAt = time.UnixMicro(updated).UTC()
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) DeleteAnnotation(ctx context.Context, projectID, id string) error {
+	result, err := s.db.ExecContext(ctx, `DELETE FROM annotations WHERE project_id=? AND id=?`, projectID, id)
 	if err != nil {
 		return err
 	}

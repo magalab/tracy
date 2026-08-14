@@ -18,6 +18,7 @@
 ✓ payload 大小校验、writer 重试和 ingest stats
 ✓ admin Project/API Key 管理与 revoke
 ✓ trace_summaries 物化摘要和时间/duration/token 查询过滤
+✓ Feedback/Annotation API、Project 隔离和 Trace Explorer 展示
 ✓ README、AGENTS.md、开发说明和 contract test 基础
 ```
 

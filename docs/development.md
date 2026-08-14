@@ -18,6 +18,8 @@ Span 校验限制单个 input/output 为 1 MiB、attributes 为 256 KiB / 128 �
 
 Default API Key 是 admin key，可以创建 Project 和 project-scoped API Key。新 Key 的明文 token 只在创建响应中返回一次；数据库只存 token hash。撤销通过 `POST /api/v1/keys/{keyID}/revoke` 完成。
 
+Annotation 存在 metadata DB 中，但所有查询都带当前 API Key 的 ProjectID。Annotation 的 `key` 必填，score 范围为 0 到 1；Trace Explorer 会在详情页加载、创建和删除 Annotation。
+
 ## Web 开发
 
 前端源码位于 `web/`，构建产物输出到 `internal/web/dist/`，由 Go `embed.FS` 编入 binary。开发前端时可运行：

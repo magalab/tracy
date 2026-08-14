@@ -76,6 +76,47 @@ func TestHTTPContract(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	annotationBody, _ := json.Marshal(map[string]any{"key": "quality", "score": 0.9, "label": "good", "comment": "contract annotation"})
+	annotationReq, _ := http.NewRequest(http.MethodPost, base+"/api/v1/traces/contract-trace/annotations", bytes.NewReader(annotationBody))
+	annotationReq.Header.Set("Authorization", "Bearer "+key)
+	annotationReq.Header.Set("Content-Type", "application/json")
+	annotationResp, err := http.DefaultClient.Do(annotationReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if annotationResp.StatusCode != http.StatusCreated {
+		t.Fatalf("annotation create status=%d", annotationResp.StatusCode)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(annotationResp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	_ = annotationResp.Body.Close()
+	if created.ID == "" {
+		t.Fatal("annotation id missing")
+	}
+	annotationListReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/traces/contract-trace/annotations", nil)
+	annotationListReq.Header.Set("Authorization", "Bearer "+key)
+	annotationListResp, err := http.DefaultClient.Do(annotationListReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if annotationListResp.StatusCode != http.StatusOK {
+		t.Fatalf("annotation list status=%d", annotationListResp.StatusCode)
+	}
+	_ = annotationListResp.Body.Close()
+	annotationDeleteReq, _ := http.NewRequest(http.MethodDelete, base+"/api/v1/annotations/"+created.ID, nil)
+	annotationDeleteReq.Header.Set("Authorization", "Bearer "+key)
+	annotationDeleteResp, err := http.DefaultClient.Do(annotationDeleteReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if annotationDeleteResp.StatusCode != http.StatusOK {
+		t.Fatalf("annotation delete status=%d", annotationDeleteResp.StatusCode)
+	}
+	_ = annotationDeleteResp.Body.Close()
 }
 
 func TestAdminContract(t *testing.T) {
