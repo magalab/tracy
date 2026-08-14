@@ -51,11 +51,13 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <span className="eyebrow">{t("brandEyebrow")}</span>
-          <h1>
-            Tracy <span>{t("traceExplorer")}</span>
-          </h1>
+        <div className="brand-lockup">
+          <img className="brand-mark" src="/tracy-mark.svg" alt="Tracy" />
+          <div>
+            <h1>
+              Tracy <span>{t("traceExplorer")}</span>
+            </h1>
+          </div>
         </div>
         <div className="topbar-actions">
           <div className="preference-actions">

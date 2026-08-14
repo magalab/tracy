@@ -55,6 +55,16 @@ h1 span {
   color: #7c8ba5;
   font-weight: 500;
 }
+.brand-lockup {
+  align-items: center;
+  display: flex;
+  gap: 11px;
+}
+.brand-mark {
+  display: block;
+  height: 34px;
+  width: 34px;
+}
 h2 {
   font-size: 17px;
   letter-spacing: -0.01em;
