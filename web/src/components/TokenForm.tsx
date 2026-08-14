@@ -1,3 +1,5 @@
+import { usePreferences } from "../i18n";
+
 type TokenFormProps = {
   value: string;
   connected: boolean;
@@ -6,24 +8,25 @@ type TokenFormProps = {
 };
 
 export function TokenForm({ value, connected, onChange, onSave }: TokenFormProps) {
+  const { t } = usePreferences();
   return (
     <div className={`token-form ${connected ? "connected" : ""}`}>
       <div className="token-state">
         <span className="token-state-dot" />
         <span>
-          <b>{connected ? "Connected" : "Connect project"}</b>
-          <small>{connected ? "API key active" : "Enter project API key"}</small>
+          <b>{connected ? t("connected") : t("connectProject")}</b>
+          <small>{connected ? t("apiKeyActive") : t("enterApiKey")}</small>
         </span>
       </div>
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         type="password"
-        aria-label="Project API key"
-        placeholder="Paste API key"
+        aria-label={t("projectApiKey")}
+        placeholder={t("pasteApiKey")}
         onKeyDown={(event) => event.key === "Enter" && onSave()}
       />
-      <button onClick={onSave}>{connected ? "Reconnect" : "Connect"}</button>
+      <button onClick={onSave}>{connected ? t("reconnect") : t("connect")}</button>
     </div>
   );
 }

@@ -1,41 +1,45 @@
 import type { DashboardMetrics } from "../types";
+import { usePreferences } from "../i18n";
 
 export function MetricsOverview({ metrics }: { metrics: DashboardMetrics }) {
+  const { t } = usePreferences();
   return (
     <section className="overview-grid">
       <article className="metric-card metric-card-primary">
-        <span className="metric-label">Requests</span>
+        <span className="metric-label">{t("requests")}</span>
         <strong>{metrics.request_count.toLocaleString()}</strong>
-        <small>traces observed</small>
+        <small>{t("tracesObserved")}</small>
         <span className="metric-mark">↗</span>
       </article>
       <article className="metric-card">
-        <span className="metric-label">Error rate</span>
+        <span className="metric-label">{t("errorRate")}</span>
         <strong>
           {(metrics.error_rate * 100).toFixed(1)}
           <em>%</em>
         </strong>
-        <small>{metrics.error_count.toLocaleString()} failed traces</small>
+        <small>
+          {metrics.error_count.toLocaleString()} {t("failedTraces")}
+        </small>
         <span className={`metric-status ${metrics.error_count ? "warning" : "good"}`}>
-          {metrics.error_count ? "needs attention" : "healthy"}
+          {metrics.error_count ? t("needsAttention") : t("healthy")}
         </span>
       </article>
       <article className="metric-card">
-        <span className="metric-label">P95 latency</span>
+        <span className="metric-label">{t("p95Latency")}</span>
         <strong>
           {metrics.p95_latency_ms.toFixed(1)}
           <em>ms</em>
         </strong>
-        <small>end-to-end trace duration</small>
-        <span className="metric-status neutral">tail performance</span>
+        <small>{t("endToEnd")}</small>
+        <span className="metric-status neutral">{t("tailPerformance")}</span>
       </article>
       <article className="metric-card">
-        <span className="metric-label">Token volume</span>
+        <span className="metric-label">{t("tokenVolume")}</span>
         <strong>{(metrics.input_tokens + metrics.output_tokens).toLocaleString()}</strong>
         <small>
           {metrics.input_tokens.toLocaleString()} in · {metrics.output_tokens.toLocaleString()} out
         </small>
-        <span className="metric-status neutral">across all traces</span>
+        <span className="metric-status neutral">{t("acrossTraces")}</span>
       </article>
     </section>
   );

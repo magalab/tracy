@@ -1,4 +1,5 @@
 import type { Annotation } from "../types";
+import { usePreferences } from "../i18n";
 
 export type AnnotationDraft = {
   key: string;
@@ -22,12 +23,13 @@ export function AnnotationPanel({
   onAdd,
   onDelete,
 }: AnnotationPanelProps) {
+  const { t } = usePreferences();
   return (
     <section className="annotation-panel">
       <div className="detail-heading">
         <div>
-          <span className="eyebrow">FEEDBACK</span>
-          <h2>Annotations</h2>
+          <span className="eyebrow">{t("feedback")}</span>
+          <h2>{t("annotations")}</h2>
         </div>
         <span className="pill">{annotations.length}</span>
       </div>
@@ -35,7 +37,7 @@ export function AnnotationPanel({
         <input
           value={draft.key}
           onChange={(event) => onDraftChange({ ...draft, key: event.target.value })}
-          placeholder="key"
+          placeholder={t("annotationKey")}
         />
         <input
           value={draft.score}
@@ -44,19 +46,19 @@ export function AnnotationPanel({
           min="0"
           max="1"
           step="0.1"
-          placeholder="score"
+          placeholder={t("score")}
         />
         <input
           value={draft.label}
           onChange={(event) => onDraftChange({ ...draft, label: event.target.value })}
-          placeholder="label"
+          placeholder={t("label")}
         />
         <input
           value={draft.comment}
           onChange={(event) => onDraftChange({ ...draft, comment: event.target.value })}
-          placeholder="comment"
+          placeholder={t("comment")}
         />
-        <button onClick={onAdd}>Add</button>
+        <button onClick={onAdd}>{t("add")}</button>
       </div>
       {annotations.map((item) => (
         <div className="annotation-row" key={item.id}>

@@ -6,11 +6,13 @@ import { TokenForm } from "./components/TokenForm";
 import { TraceDetail } from "./components/TraceDetail";
 import { TraceList } from "./components/TraceList";
 import { useTraceExplorer } from "./hooks/useTraceExplorer";
+import { PreferencesProvider, usePreferences } from "./i18n";
 import "./styles.css";
 
 const tokenKey = "tracy.api_token";
 
 function App() {
+  const { language, theme, t, toggleLanguage, toggleTheme } = usePreferences();
   const [token, setToken] = useState(() => localStorage.getItem(tokenKey) ?? "");
   const [draftToken, setDraftToken] = useState(token);
   const [filter, setFilter] = useState("");
@@ -49,27 +51,38 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <span className="eyebrow">SELF-HOSTED OBSERVABILITY</span>
+          <span className="eyebrow">{t("brandEyebrow")}</span>
           <h1>
-            Tracy <span>Trace Explorer</span>
+            Tracy <span>{t("traceExplorer")}</span>
           </h1>
         </div>
-        <TokenForm
-          value={draftToken}
-          connected={Boolean(token)}
-          onChange={setDraftToken}
-          onSave={saveToken}
-        />
+        <div className="topbar-actions">
+          <div className="preference-actions">
+            <button className="preference-button" onClick={toggleLanguage}>
+              {language === "en" ? "中" : "EN"}
+            </button>
+            <button className="preference-button" onClick={toggleTheme}>
+              {theme === "dark" ? "☼" : "☾"}
+              <span>{theme === "dark" ? t("theme") : t("darkTheme")}</span>
+            </button>
+          </div>
+          <TokenForm
+            value={draftToken}
+            connected={Boolean(token)}
+            onChange={setDraftToken}
+            onSave={saveToken}
+          />
+        </div>
       </header>
       <main className="main-content">
         <section className="overview-header">
           <div>
-            <span className="eyebrow">OPERATIONS / LAST 24 HOURS</span>
-            <h2>Trace health at a glance</h2>
-            <p>Inspect throughput, failures and latency before drilling into a run.</p>
+            <span className="eyebrow">{t("operations")}</span>
+            <h2>{t("traceHealth")}</h2>
+            <p>{t("inspectHealth")}</p>
           </div>
           <div className="live-indicator">
-            <span className="live-dot" /> LIVE LOCAL STORE
+            <span className="live-dot" /> {t("liveStore")}
           </div>
         </section>
         {explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
@@ -107,8 +120,8 @@ function App() {
         </section>
       </main>
       <footer>
-        <span>TRACY / LOCAL MODE</span>
-        <span>SQLite trace store · API v1</span>
+        <span>{t("localMode")}</span>
+        <span>{t("sqliteStore")}</span>
       </footer>
     </div>
   );
@@ -116,6 +129,8 @@ function App() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <PreferencesProvider>
+      <App />
+    </PreferencesProvider>
   </StrictMode>,
 );

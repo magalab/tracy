@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { AnnotationPanel, type AnnotationDraft } from "./AnnotationPanel";
 import type { Annotation, Span } from "../types";
+import { usePreferences } from "../i18n";
 
 type TraceDetailProps = {
   selectedID: string;
@@ -18,6 +19,7 @@ function formatDuration(nanoseconds: number) {
 }
 
 function SpanTree({ spans }: { spans: Span[] }) {
+  const { t } = usePreferences();
   const spanIDs = new Set(spans.map((span) => span.span_id));
   const children = new Map<string, Span[]>();
   const roots: Span[] = [];
@@ -53,13 +55,13 @@ function SpanTree({ spans }: { spans: Span[] }) {
             <div className="io-grid">
               {span.input && (
                 <div>
-                  <span className="field-label">INPUT</span>
+                  <span className="field-label">{t("input")}</span>
                   <pre>{span.input}</pre>
                 </div>
               )}
               {span.output && (
                 <div>
-                  <span className="field-label">OUTPUT</span>
+                  <span className="field-label">{t("output")}</span>
                   <pre>{span.output}</pre>
                 </div>
               )}
@@ -67,7 +69,9 @@ function SpanTree({ spans }: { spans: Span[] }) {
           )}
           {span.attributes && Object.keys(span.attributes).length > 0 && (
             <details>
-              <summary>Attributes ({Object.keys(span.attributes).length})</summary>
+              <summary>
+                {t("attributes")} ({Object.keys(span.attributes).length})
+              </summary>
               <pre>{JSON.stringify(span.attributes, null, 2)}</pre>
             </details>
           )}
@@ -89,13 +93,14 @@ export function TraceDetail({
   onAddAnnotation,
   onDeleteAnnotation,
 }: TraceDetailProps) {
+  const { t } = usePreferences();
   if (!selectedID) {
     return (
       <section className="detail-panel">
         <div className="detail-empty">
           <div className="orbit">✦</div>
-          <h2>Select a trace</h2>
-          <p>Choose a trace from the list to inspect its span tree, timing, inputs and outputs.</p>
+          <h2>{t("selectTrace")}</h2>
+          <p>{t("selectTraceHint")}</p>
         </div>
       </section>
     );
@@ -105,10 +110,12 @@ export function TraceDetail({
     <section className="detail-panel">
       <div className="detail-heading">
         <div>
-          <span className="eyebrow">TRACE DETAIL</span>
+          <span className="eyebrow">{t("traceDetail")}</span>
           <h2>{selectedID}</h2>
         </div>
-        <span className="pill">{selected.length} spans</span>
+        <span className="pill">
+          {selected.length} {t("spans")}
+        </span>
       </div>
       <SpanTree spans={selected} />
       <AnnotationPanel
