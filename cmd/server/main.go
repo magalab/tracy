@@ -56,6 +56,7 @@ func main() {
 func ensureDefault(ctx context.Context, s *meta.Store, logger *slog.Logger) {
 	_, err := s.Project(ctx, "default")
 	if err == nil {
+		must(logger, s.EnsureAdmin(ctx, "default-key"))
 		return
 	}
 	if !errors.Is(err, meta.ErrNotFound) {
@@ -70,7 +71,7 @@ func ensureDefault(ctx context.Context, s *meta.Store, logger *slog.Logger) {
 		token = "tr_" + hex.EncodeToString(b[:])
 		logger.Info("created initial API key; store it securely", "api_key", token)
 	}
-	must(logger, s.CreateAPIKey(ctx, meta.APIKey{ID: "default-key", ProjectID: "default", Name: "Default API Key", TokenHash: meta.HashToken(token)}))
+	must(logger, s.CreateAPIKey(ctx, meta.APIKey{ID: "default-key", ProjectID: "default", Name: "Default API Key", Role: "admin", TokenHash: meta.HashToken(token)}))
 }
 func must(logger *slog.Logger, err error) {
 	if err != nil {

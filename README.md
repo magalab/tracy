@@ -52,6 +52,9 @@ curl 'http://localhost:8080/api/v1/traces?limit=20&status=ok' \
 - `POST /v1/loop/traces/ingest` 接受官方 CozeLoop Go SDK 的 `{ "spans": [...] }` payload，成功返回 `{"code":0,"msg":""}`。
 - `GET /api/v1/traces` 返回当前 Project 的 Trace 列表；`GET /api/v1/traces/{trace_id}` 返回单个 Trace。
 - `/` 和其它前端路径返回嵌入式 React Trace Explorer。
+- Admin API Key 可调用 `GET /api/v1/projects`、`POST /api/v1/projects`、项目 Key 列表/创建和 `POST /api/v1/keys/{id}/revoke`。
+- Admin API Key 调用 `GET /api/v1/ingest/stats` 可查看 accepted、written、dropped、queue depth 和 write errors。
+- 单个 input/output 最大 1 MiB，attributes 最大 256 KiB / 128 项；超限返回 `413 payload_too_large`。
 - 错误格式固定为 `{ "error": { "code": "...", "message": "..." } }`。
 - API 使用 `Authorization: Bearer <token>`；Key 只绑定一个 Project。
 

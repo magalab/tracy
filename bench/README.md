@@ -5,6 +5,7 @@
 ```bash
 GOCACHE=/private/tmp/tracy-gocache go test ./bench -bench=. -benchtime=3s
 TRACY_BENCH_SPANS=1000000 GOCACHE=/private/tmp/tracy-gocache go test ./bench -run TestWorkloadSmoke -v
+TRACY_BENCH_CONCURRENT=10 GOCACHE=/private/tmp/tracy-gocache go test ./bench -run TestConcurrentReadWrite -v
 ```
 
 建议在记录结果时同时保存：机器信息、Go/SQLite 版本、batch size、WAL 配置、p50/p95/p99 查询延迟、RSS、数据库大小和 WAL 大小。正式比较 DuckDB 前，先用相同 workload 建立 SQLite 基线。

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -42,6 +44,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/loop/traces/ingest", s.cozeLoopIngest)
 	mux.HandleFunc("GET /api/v1/traces/", s.getTrace)
 	mux.HandleFunc("GET /api/v1/traces", s.listTraces)
+	mux.HandleFunc("GET /api/v1/ingest/stats", s.ingestStats)
+	mux.HandleFunc("GET /api/v1/projects", s.listProjects)
+	mux.HandleFunc("POST /api/v1/projects", s.createProject)
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/keys", s.listProjectKeys)
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/keys", s.createProjectKey)
+	mux.HandleFunc("POST /api/v1/keys/{keyID}/revoke", s.revokeKey)
 	mux.Handle("/", web.Handler())
 	return logging(mux, s.logger)
 }
@@ -74,8 +82,8 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		if req.Spans[i].ReceivedAt.IsZero() {
 			req.Spans[i].ReceivedAt = now
 		}
-		if req.Spans[i].TraceID == "" || req.Spans[i].SpanID == "" || req.Spans[i].Name == "" {
-			errorJSON(w, http.StatusBadRequest, "invalid_span", "trace_id, span_id and name are required")
+		if err := req.Spans[i].Validate(); err != nil {
+			writeValidationError(w, err)
 			return
 		}
 	}
@@ -110,6 +118,12 @@ func (s *Server) cozeLoopIngest(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusBadRequest, "empty_spans", "at least one span is required")
 		return
 	}
+	for _, span := range spans {
+		if err := span.Validate(); err != nil {
+			writeValidationError(w, err)
+			return
+		}
+	}
 	if err = s.writer.Enqueue(spans); err != nil {
 		if errors.Is(err, ingest.ErrFull) {
 			errorJSON(w, http.StatusTooManyRequests, "ingest_queue_full", "ingest queue is full")
@@ -119,6 +133,183 @@ func (s *Server) cozeLoopIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "msg": ""})
+}
+
+func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	writeJSON(w, http.StatusOK, s.writer.Metrics())
+}
+
+func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	projects, err := s.meta.ListProjects(r.Context())
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list projects")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": projects})
+}
+
+func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	var body struct {
+		Name    string `json:"name"`
+		KeyName string `json:"key_name"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" || len(body.Name) > 128 {
+		errorJSON(w, http.StatusBadRequest, "invalid_project", "name is required and must be at most 128 bytes")
+		return
+	}
+	projectID, err := randomID("proj_", 12)
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "id_generation_failed", "could not generate project id")
+		return
+	}
+	now := time.Now().UTC()
+	project := meta.Project{ID: projectID, Name: strings.TrimSpace(body.Name), CreatedAt: now, UpdatedAt: now}
+	if err := s.meta.CreateProject(r.Context(), project); err != nil {
+		errorJSON(w, http.StatusConflict, "project_exists", "could not create project")
+		return
+	}
+	key, token, err := s.newKey(projectID, body.KeyName, "project")
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "key_generation_failed", "could not create API key")
+		return
+	}
+	if err := s.meta.CreateAPIKey(r.Context(), key); err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not save API key")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"project": project, "api_key": keyView{ID: key.ID, ProjectID: key.ProjectID, Name: key.Name, Role: key.Role, Token: token}})
+}
+
+func (s *Server) listProjectKeys(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	projectID := r.PathValue("projectID")
+	if _, err := s.meta.Project(r.Context(), projectID); err != nil {
+		errorJSON(w, http.StatusNotFound, "project_not_found", "project was not found")
+		return
+	}
+	keys, err := s.meta.ListAPIKeys(r.Context(), projectID)
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list API keys")
+		return
+	}
+	result := make([]keyView, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, keyView{ID: key.ID, ProjectID: key.ProjectID, Name: key.Name, Role: key.Role, ExpiresAt: key.ExpiresAt, Revoked: key.Revoked, LastUsedAt: key.LastUsedAt})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": result})
+}
+
+func (s *Server) createProjectKey(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	projectID := r.PathValue("projectID")
+	if _, err := s.meta.Project(r.Context(), projectID); err != nil {
+		errorJSON(w, http.StatusNotFound, "project_not_found", "project was not found")
+		return
+	}
+	var body struct {
+		Name      string `json:"name"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
+		return
+	}
+	key, token, err := s.newKey(projectID, body.Name, "project")
+	if err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_key", err.Error())
+		return
+	}
+	if body.ExpiresAt != "" {
+		expires, parseErr := time.Parse(time.RFC3339, body.ExpiresAt)
+		if parseErr != nil {
+			errorJSON(w, http.StatusBadRequest, "invalid_expires_at", "expires_at must be RFC3339")
+			return
+		}
+		key.ExpiresAt = &expires
+	}
+	if err := s.meta.CreateAPIKey(r.Context(), key); err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not save API key")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"api_key": keyView{ID: key.ID, ProjectID: key.ProjectID, Name: key.Name, Role: key.Role, Token: token, ExpiresAt: key.ExpiresAt}})
+}
+
+func (s *Server) revokeKey(w http.ResponseWriter, r *http.Request) {
+	if !s.requireAdmin(w, r) {
+		return
+	}
+	if err := s.meta.RevokeAPIKey(r.Context(), r.PathValue("keyID")); err != nil {
+		if errors.Is(err, meta.ErrNotFound) {
+			errorJSON(w, http.StatusNotFound, "key_not_found", "API key was not found")
+			return
+		}
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not revoke API key")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"revoked": true})
+}
+
+type keyView struct {
+	ID         string     `json:"id"`
+	ProjectID  string     `json:"project_id"`
+	Name       string     `json:"name"`
+	Role       string     `json:"role"`
+	Token      string     `json:"token,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	Revoked    bool       `json:"revoked,omitempty"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+}
+
+func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
+	key, err := s.authenticate(r)
+	if err != nil {
+		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
+		return false
+	}
+	if key.Role != "admin" {
+		errorJSON(w, http.StatusForbidden, "admin_required", "admin API key required")
+		return false
+	}
+	return true
+}
+func (s *Server) newKey(projectID, name, role string) (meta.APIKey, string, error) {
+	if strings.TrimSpace(name) == "" {
+		name = "API Key"
+	}
+	id, err := randomID("key_", 12)
+	if err != nil {
+		return meta.APIKey{}, "", err
+	}
+	var bytes [24]byte
+	if _, err = rand.Read(bytes[:]); err != nil {
+		return meta.APIKey{}, "", err
+	}
+	token := "tr_" + hex.EncodeToString(bytes[:])
+	return meta.APIKey{ID: id, ProjectID: projectID, Name: strings.TrimSpace(name), Role: role, TokenHash: meta.HashToken(token)}, token, nil
+}
+func randomID(prefix string, size int) (string, error) {
+	bytes := make([]byte, size)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return prefix + hex.EncodeToString(bytes), nil
 }
 func (s *Server) getTrace(w http.ResponseWriter, r *http.Request) {
 	key, err := s.authenticate(r)
@@ -179,6 +370,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 func errorJSON(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": message}})
+}
+func writeValidationError(w http.ResponseWriter, err error) {
+	if errors.Is(err, domain.ErrPayloadTooLarge) {
+		errorJSON(w, http.StatusRequestEntityTooLarge, "payload_too_large", "span payload exceeds configured limits")
+		return
+	}
+	errorJSON(w, http.StatusBadRequest, "invalid_span", err.Error())
 }
 func logging(next http.Handler, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

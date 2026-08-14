@@ -15,6 +15,8 @@
 ✓ CozeLoop Go SDK trace ingest 兼容层
 ✓ React Trace Explorer 和 Go embed.FS
 ✓ SQLite benchmark harness 和基础 workload
+✓ payload 大小校验、writer 重试和 ingest stats
+✓ admin Project/API Key 管理与 revoke
 ✓ README、AGENTS.md、开发说明和 contract test 基础
 ```
 
@@ -32,8 +34,6 @@ npm run build
 
 ```text
 □ 持续写入 + 并发查询的完整 SQLite 性能基线
-□ 输入/输出大小限制和 writer 错误指标
-□ 更完整的 Project/API Key 管理 API
 □ DuckDB/VictoriaTraces 仅在 benchmark 证明必要后评估
 ```
 
