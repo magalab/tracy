@@ -131,11 +131,6 @@ export function TraceDetail({
         <div>
           <h2>{t("traceDetail")}</h2>
         </div>
-        <div className="detail-tabs">
-          <button className="active">{t("run")}</button>
-          <button>{t("metadata")}</button>
-          <button>{t("feedback")}</button>
-        </div>
       </div>
       <div className="detail-workbench">
         <div className="detail-tree-column">

@@ -28,7 +28,7 @@ export function AnnotationPanel({
     <section className="annotation-panel">
       <div className="detail-heading">
         <div>
-          <span className="eyebrow">{t("feedback")}</span>
+          <span className="eyebrow">{t("annotations")}</span>
           <h2>{t("annotations")}</h2>
         </div>
         <span className="pill">{annotations.length}</span>
