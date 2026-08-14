@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Button, Form } from "@douyinfe/semi-ui";
 import { usePreferences } from "../i18n";
 
 type LoginPageProps = {
@@ -7,16 +8,14 @@ type LoginPageProps = {
 
 export function LoginPage({ onLogin }: LoginPageProps) {
   const { t } = usePreferences();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function submit() {
+  async function submit(values: { email: string; password: string }) {
     setLoading(true);
     setError("");
     try {
-      await onLogin(email, password);
+      await onLogin(values.email, values.password);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -31,25 +30,31 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         <span className="eyebrow">{t("selfHosted")}</span>
         <h1>{t("welcomeBack")}</h1>
         <p>{t("signInHint")}</p>
-        <input
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          type="email"
-          placeholder={t("email")}
-          autoComplete="username"
-        />
-        <input
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          type="password"
-          placeholder={t("password")}
-          autoComplete="current-password"
-          onKeyDown={(event) => event.key === "Enter" && void submit()}
-        />
-        {error && <div className="auth-error">{error}</div>}
-        <button onClick={() => void submit()} disabled={loading}>
-          {loading ? t("signingIn") : t("signIn")}
-        </button>
+        <Form
+          layout="vertical"
+          onSubmit={(values) => void submit(values as { email: string; password: string })}
+        >
+          <Form.Input
+            field="email"
+            label={t("email")}
+            placeholder={t("email")}
+            rules={[{ required: true, message: t("emailRequired") }]}
+            type="email"
+            autoComplete="username"
+          />
+          <Form.Input
+            field="password"
+            label={t("password")}
+            placeholder={t("password")}
+            rules={[{ required: true, message: t("passwordRequired") }]}
+            type="password"
+            autoComplete="current-password"
+          />
+          {error && <div className="auth-error">{error}</div>}
+          <Button htmlType="submit" loading={loading} theme="solid" type="primary" block>
+            {t("signIn")}
+          </Button>
+        </Form>
       </section>
     </main>
   );

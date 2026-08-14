@@ -2176,6 +2176,211 @@ footer {
   align-items: center;
   grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) auto;
 }
+.trace-table {
+  background: transparent;
+  border-top: 1px solid #1b2d47;
+  color: #c7d4e8;
+}
+.trace-table .semi-table-thead > .semi-table-row > .semi-table-row-head {
+  background: #101a2d;
+  border-bottom-color: #263753;
+  color: #7587a4;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.trace-table .semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+  background: transparent;
+  border-bottom-color: #1b2d47;
+  color: #c7d4e8;
+  font-size: 11px;
+}
+.trace-table .semi-table-tbody > .semi-table-row:hover > .semi-table-row-cell,
+.trace-table .semi-table-tbody > .semi-table-row.active > .semi-table-row-cell {
+  background: #132844;
+}
+.trace-table .semi-table-tbody > .semi-table-row {
+  cursor: pointer;
+}
+.trace-table-id {
+  align-items: center;
+  display: flex;
+  gap: 9px;
+  min-width: 0;
+}
+.trace-table-id strong {
+  color: #e4edf9;
+  font-family: ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.table-state {
+  align-items: center;
+  color: #8295b1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+  min-height: 260px;
+  text-align: center;
+}
+.table-state p {
+  font-size: 11px;
+}
+[data-theme="light"] .trace-table .semi-table-thead > .semi-table-row > .semi-table-row-head {
+  background: #f7f9fc;
+  border-color: #dce5f0;
+  color: #607594;
+}
+[data-theme="light"] .trace-table .semi-table-tbody > .semi-table-row > .semi-table-row-cell {
+  border-color: #dce5f0;
+  color: #405674;
+}
+[data-theme="light"] .trace-table .semi-table-tbody > .semi-table-row:hover > .semi-table-row-cell,
+[data-theme="light"]
+  .trace-table
+  .semi-table-tbody
+  > .semi-table-row.active
+  > .semi-table-row-cell {
+  background: #eaf2fc;
+}
+[data-theme="light"] .trace-table-id strong {
+  color: #1b2a40;
+}
+
+/* Semi form primitives share one visual language with the app shell. */
+.auth-card .semi-form-field,
+.workspace-card .semi-form-field {
+  margin-bottom: 14px;
+}
+.auth-card .semi-form-field-label,
+.workspace-card .semi-form-field-label,
+.annotation-form .semi-form-field-label {
+  color: #8295b1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.auth-card .semi-input-wrapper,
+.workspace-card .semi-input-wrapper,
+.annotation-form .semi-input-wrapper {
+  background: #101a2d;
+  border: 1px solid #263753;
+  border-radius: 7px;
+  box-shadow: none;
+  color: #dce7fb;
+  min-height: 42px;
+}
+.auth-card .semi-input-wrapper:hover,
+.workspace-card .semi-input-wrapper:hover,
+.annotation-form .semi-input-wrapper:hover {
+  border-color: #4d6e9d;
+}
+.auth-card .semi-input-wrapper-focus,
+.workspace-card .semi-input-wrapper-focus,
+.annotation-form .semi-input-wrapper-focus {
+  border-color: #70a7ff;
+  box-shadow: 0 0 0 2px #4c85e31c;
+}
+.auth-card .semi-input,
+.workspace-card .semi-input,
+.annotation-form .semi-input {
+  display: block;
+  color: #dce7fb;
+  margin-top: 0;
+  width: 100%;
+}
+.auth-card .semi-input::placeholder,
+.workspace-card .semi-input::placeholder,
+.annotation-form .semi-input::placeholder {
+  color: #687994;
+}
+.auth-card .semi-form-field-error-message,
+.workspace-card .semi-form-field-error-message,
+.annotation-form .semi-form-field-error-message {
+  color: #ff9ba0;
+  font-size: 11px;
+}
+.auth-card .semi-button {
+  margin-top: 5px;
+}
+.workspace-create.semi-form {
+  align-items: flex-end;
+  display: flex;
+  gap: 8px;
+}
+.workspace-create.semi-form .semi-form-field {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+}
+.workspace-create.semi-form .semi-form-field-label {
+  display: none;
+}
+.workspace-create.semi-form .semi-button {
+  flex: 0 0 42px;
+  height: 42px;
+  padding: 0;
+}
+.annotation-form.semi-form {
+  align-items: start;
+  display: grid;
+}
+.annotation-form.semi-form .semi-form-field {
+  margin: 0;
+  min-width: 0;
+}
+.annotation-form.semi-form .semi-form-field-label {
+  display: none;
+}
+.annotation-form.semi-form .semi-button {
+  height: 42px;
+  margin-top: 0;
+}
+.annotation-form.semi-form .semi-form-field-error-message {
+  position: absolute;
+}
+.ghost.semi-button,
+.load-more.semi-button {
+  border-radius: 6px;
+  color: #9ab1d2;
+  font-size: 11px;
+  padding: 0 10px;
+}
+.ghost.semi-button:hover,
+.load-more.semi-button:hover {
+  background: #162944;
+  color: #e4edf9;
+}
+[data-theme="light"] .auth-card .semi-form-field-label,
+[data-theme="light"] .workspace-card .semi-form-field-label,
+[data-theme="light"] .annotation-form .semi-form-field-label {
+  color: #607594;
+}
+[data-theme="light"] .auth-card .semi-input-wrapper,
+[data-theme="light"] .workspace-card .semi-input-wrapper,
+[data-theme="light"] .annotation-form .semi-input-wrapper {
+  background: #f7f9fc;
+  border-color: #cbd8e8;
+  color: #243652;
+}
+[data-theme="light"] .auth-card .semi-input,
+[data-theme="light"] .workspace-card .semi-input,
+[data-theme="light"] .annotation-form .semi-input {
+  color: #243652;
+}
+[data-theme="light"] .auth-card .semi-input::placeholder,
+[data-theme="light"] .workspace-card .semi-input::placeholder,
+[data-theme="light"] .annotation-form .semi-input::placeholder {
+  color: #657792;
+}
+[data-theme="light"] .ghost.semi-button:hover,
+[data-theme="light"] .load-more.semi-button:hover {
+  background: #eaf2fc;
+  color: #243652;
+}
 .main-content > .list-panel .trace-main {
   display: contents;
 }

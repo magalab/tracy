@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { usePreferences } from "../i18n";
 import type { Workspace } from "../types";
+import { Button, Form } from "@douyinfe/semi-ui";
 
 type WorkspacePickerProps = {
   workspaces: Workspace[];
@@ -52,17 +53,21 @@ export function WorkspacePicker({
             </button>
           ))}
         </div>
-        <div className="workspace-create">
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
+        <Form
+          className="workspace-create"
+          layout="horizontal"
+          onSubmit={() => void create()}
+          onValueChange={(values) => setName(String(values.name ?? ""))}
+        >
+          <Form.Input
+            field="name"
             placeholder={t("workspaceName")}
-            onKeyDown={(event) => event.key === "Enter" && void create()}
+            rules={[{ required: true, message: t("workspaceNameRequired") }]}
           />
-          <button onClick={() => void create()} disabled={creating || !name.trim()}>
+          <Button htmlType="submit" loading={creating} theme="solid" type="primary">
             {t("createWorkspace")}
-          </button>
-        </div>
+          </Button>
+        </Form>
       </section>
     </main>
   );

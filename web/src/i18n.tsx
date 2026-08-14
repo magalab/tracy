@@ -106,6 +106,11 @@ const messages = {
     startTime: "Start time",
     startDate: "Start date",
     endDate: "End date",
+    emailRequired: "Email is required",
+    passwordRequired: "Password is required",
+    workspaceNameRequired: "Workspace name is required",
+    annotationKeyRequired: "Annotation key is required",
+    delete: "Delete",
   },
   zh: {
     brandEyebrow: "自托管可观测性",
@@ -208,6 +213,11 @@ const messages = {
     startTime: "开始时间",
     startDate: "开始日期",
     endDate: "结束日期",
+    emailRequired: "请输入邮箱",
+    passwordRequired: "请输入密码",
+    workspaceNameRequired: "请输入 Workspace 名称",
+    annotationKeyRequired: "请输入标注键",
+    delete: "删除",
   },
 } as const;
 

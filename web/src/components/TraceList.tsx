@@ -1,6 +1,6 @@
 import type { TraceSummary } from "../types";
 import { usePreferences } from "../i18n";
-import { DatePicker, Select } from "@douyinfe/semi-ui";
+import { Button, DatePicker, Empty, Select, Spin, Table } from "@douyinfe/semi-ui";
 
 type TraceListProps = {
   traces: TraceSummary[];
@@ -61,6 +61,49 @@ export function TraceList({
   const visibleItems = traces.filter((item) =>
     item.trace_id.toLowerCase().includes(filter.toLowerCase()),
   );
+  const columns = [
+    {
+      title: "TraceID",
+      dataIndex: "trace_id",
+      key: "trace_id",
+      width: "34%",
+      render: (_: string, trace: TraceSummary) => (
+        <div className="trace-table-id">
+          <strong>{trace.trace_id}</strong>
+          <span className={`status-badge ${trace.status}`}>
+            {trace.status === "error" ? t("errors") : t("healthyStatus")}
+          </span>
+        </div>
+      ),
+    },
+    {
+      title: t("startTime"),
+      dataIndex: "start_time",
+      key: "start_time",
+      width: "22%",
+      render: (value: string) => new Date(value).toLocaleString(),
+    },
+    {
+      title: t("spans"),
+      dataIndex: "span_count",
+      key: "span_count",
+      align: "right" as const,
+    },
+    {
+      title: t("tokens"),
+      key: "tokens",
+      align: "right" as const,
+      render: (_: unknown, trace: TraceSummary) =>
+        (trace.input_tokens + trace.output_tokens).toLocaleString(),
+    },
+    {
+      title: t("duration"),
+      key: "duration",
+      align: "right" as const,
+      render: (_: unknown, trace: TraceSummary) =>
+        `${(new Date(trace.end_time).getTime() - new Date(trace.start_time).getTime()).toFixed(0)}ms`,
+    },
+  ];
   return (
     <section className="list-panel">
       <div className="panel-heading">
@@ -68,9 +111,15 @@ export function TraceList({
           <span className="eyebrow">{t("projectDefault")}</span>
           <h2>{t("recentTraces")}</h2>
         </div>
-        <button className="ghost" onClick={onRefresh} disabled={loading}>
+        <Button
+          className="ghost"
+          theme="borderless"
+          type="tertiary"
+          onClick={onRefresh}
+          disabled={loading}
+        >
           {t("refresh")}
-        </button>
+        </Button>
       </div>
       <div className="toolbar">
         <div className="search-field">
@@ -87,7 +136,7 @@ export function TraceList({
           className="trace-filter-select"
           placeholder={t("allStatus")}
           showClear
-          value={statusFilter}
+          value={statusFilter || undefined}
           onChange={(value) => onStatusChange(String(value ?? ""))}
         >
           <Select.Option value="ok">{t("healthyStatus")}</Select.Option>
@@ -114,7 +163,7 @@ export function TraceList({
           className="trace-filter-select"
           placeholder={t("allKinds")}
           showClear
-          value={kindFilter}
+          value={kindFilter || undefined}
           onChange={(value) => onKindChange(String(value ?? ""))}
         >
           <Select.Option value="llm">LLM</Select.Option>
@@ -135,56 +184,47 @@ export function TraceList({
           <p>{t("connectHint")}</p>
         </div>
       )}
-      {token && loading && <div className="empty">{t("loadingTraces")}</div>}
-      {token && !loading && visibleItems.length === 0 && (
-        <div className="empty">
-          <strong>{t("noTracesMatch")}</strong>
-          <p>{t("clearFiltersHint")}</p>
-          <button className="ghost" onClick={onClearFilters}>
-            {t("clearFilters")}
-          </button>
+      {token && loading && (
+        <div className="table-state">
+          <Spin tip={t("loadingTraces")} />
         </div>
       )}
-      <div className="trace-list">
-        {visibleItems.map((trace) => (
-          <button
-            className={`trace-row ${selectedID === trace.trace_id ? "active" : ""}`}
-            key={trace.trace_id}
-            aria-label={`${t("openTrace")} ${trace.trace_id}`}
-            onClick={() => onOpen(trace.trace_id)}
-          >
-            <span className="trace-main">
-              <div className="trace-title">
-                <strong>{trace.trace_id}</strong>
-                <span className={`status-badge ${trace.status}`}>
-                  {trace.status === "error" ? t("errors") : t("healthyStatus")}
-                </span>
-              </div>
-              <small>{new Date(trace.start_time).toLocaleString()}</small>
-              <div className="trace-facts">
-                <span>
-                  {trace.span_count} {t("spans")}
-                </span>
-                <span>
-                  {(trace.input_tokens + trace.output_tokens).toLocaleString()} {t("tokens")}
-                </span>
-              </div>
-            </span>
-            <span className="trace-meta">
-              <b>
-                {(
-                  new Date(trace.end_time).getTime() - new Date(trace.start_time).getTime()
-                ).toFixed(0)}
-                ms
-              </b>
-            </span>
-          </button>
-        ))}
-      </div>
+      {token && !loading && visibleItems.length === 0 && (
+        <div className="table-state">
+          <Empty description={t("noTracesMatch")} />
+          <p>{t("clearFiltersHint")}</p>
+          <Button className="ghost" theme="borderless" type="tertiary" onClick={onClearFilters}>
+            {t("clearFilters")}
+          </Button>
+        </div>
+      )}
+      {!loading && visibleItems.length > 0 && (
+        <Table<TraceSummary>
+          className="trace-table"
+          columns={columns}
+          dataSource={visibleItems}
+          empty={<Empty description={t("noTracesMatch")} />}
+          pagination={false}
+          rowKey="trace_id"
+          onRow={(trace) =>
+            trace
+              ? {
+                  className: selectedID === trace.trace_id ? "active" : "",
+                  onClick: () => onOpen(trace.trace_id),
+                }
+              : {}
+          }
+        />
+      )}
       {cursor && (
-        <button className="load-more" onClick={() => onLoadMore(cursor)}>
+        <Button
+          className="load-more"
+          theme="borderless"
+          type="tertiary"
+          onClick={() => onLoadMore(cursor)}
+        >
           {t("loadOlder")}
-        </button>
+        </Button>
       )}
     </section>
   );
