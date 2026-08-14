@@ -1,0 +1,14 @@
+server:
+  addr: ":8080"
+
+metadata:
+  sqlite:
+    path: "./data/meta.db"
+
+trace:
+  sqlite:
+    path: "./data/traces.db"
+  writer:
+    batch_size: 128
+    flush_interval: "50ms"
+    queue_size: 4096
