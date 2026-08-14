@@ -1,11 +1,11 @@
 import { usePreferences, type TranslationKey } from "../i18n";
 import type { User, Workspace } from "../types";
+import { MetricsOverview } from "./MetricsOverview";
 import { UserMenu } from "./UserMenu";
 import { WorkspaceMenu } from "./WorkspaceMenu";
 
 type AppSidebarProps = {
   user: User;
-  workspace: Workspace;
   workspaces: Workspace[];
   activeID: string;
   onSelectWorkspace: (id: string) => Promise<void>;
@@ -13,6 +13,7 @@ type AppSidebarProps = {
   onLogout: () => void;
   collapsed: boolean;
   onToggle: () => void;
+  metrics: import("../types").DashboardMetrics | null;
 };
 
 type NavItem = { icon: string; label: TranslationKey; active?: boolean };
@@ -27,7 +28,6 @@ const groups: NavGroup[] = [
 
 export function AppSidebar({
   user,
-  workspace,
   workspaces,
   activeID,
   onSelectWorkspace,
@@ -35,6 +35,7 @@ export function AppSidebar({
   onLogout,
   collapsed,
   onToggle,
+  metrics,
 }: AppSidebarProps) {
   const { t } = usePreferences();
 
@@ -69,8 +70,9 @@ export function AppSidebar({
           </div>
         ))}
       </nav>
+      {metrics && <MetricsOverview metrics={metrics} compact />}
       <div className="sidebar-user">
-        <UserMenu user={user} workspace={workspace} onLogout={onLogout} />
+        <UserMenu user={user} onLogout={onLogout} />
       </div>
     </aside>
   );

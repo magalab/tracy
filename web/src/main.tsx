@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { AnnotationDraft } from "./components/AnnotationPanel";
 import { AppSidebar } from "./components/AppSidebar";
 import { LoginPage } from "./components/LoginPage";
-import { MetricsOverview } from "./components/MetricsOverview";
 import { TraceDetail } from "./components/TraceDetail";
 import { TraceList } from "./components/TraceList";
 import { WorkspacePicker } from "./components/WorkspacePicker";
@@ -41,7 +40,6 @@ function App() {
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
-  const [overviewOpen, setOverviewOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft>({
     key: "quality",
@@ -149,7 +147,6 @@ function App() {
     <div className="app-shell">
       <AppSidebar
         user={user}
-        workspace={activeWorkspace}
         workspaces={workspaces}
         activeID={activeWorkspaceID}
         onSelectWorkspace={selectWorkspace}
@@ -157,6 +154,7 @@ function App() {
         onLogout={logout}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+        metrics={explorer.metrics}
       />
       <div className="app-main">
         <header className="topbar">
@@ -181,27 +179,6 @@ function App() {
           </div>
         </header>
         <main className="main-content">
-          <section className={`overview-header ${overviewOpen ? "expanded" : "collapsed"}`}>
-            <div>
-              <span className="eyebrow">{t("operations")}</span>
-              <h2>{t("traceHealth")}</h2>
-              <p>{t("inspectHealth")}</p>
-            </div>
-            <div className="overview-actions">
-              <div className="live-indicator">
-                <span className="live-dot" /> {t("liveStore")}
-              </div>
-              <button
-                className="overview-toggle"
-                onClick={() => setOverviewOpen((open) => !open)}
-                aria-label={overviewOpen ? t("hideOverview") : t("showOverview")}
-                title={overviewOpen ? t("hideOverview") : t("showOverview")}
-              >
-                {overviewOpen ? "⌃" : "⌄"}
-              </button>
-            </div>
-          </section>
-          {overviewOpen && explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
           {explorer.selectedID ? (
             <TraceDetail
               selectedID={explorer.selectedID}

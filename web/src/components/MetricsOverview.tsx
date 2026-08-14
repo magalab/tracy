@@ -1,10 +1,16 @@
 import type { DashboardMetrics } from "../types";
 import { usePreferences } from "../i18n";
 
-export function MetricsOverview({ metrics }: { metrics: DashboardMetrics }) {
+export function MetricsOverview({
+  metrics,
+  compact = false,
+}: {
+  metrics: DashboardMetrics;
+  compact?: boolean;
+}) {
   const { t } = usePreferences();
   return (
-    <section className="overview-grid">
+    <section className={`overview-grid ${compact ? "compact" : ""}`}>
       <article className="metric-card metric-card-primary">
         <span className="metric-label">{t("requests")}</span>
         <strong>{metrics.request_count.toLocaleString()}</strong>

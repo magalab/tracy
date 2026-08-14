@@ -1548,8 +1548,56 @@ footer {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  height: 100vh;
   overflow: hidden;
   padding: 18px 12px 12px;
+}
+.app-sidebar .sidebar-nav {
+  flex: 1 1 auto;
+}
+.app-sidebar .overview-grid.compact {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr 1fr;
+  margin: 4px 4px 12px;
+}
+.app-sidebar .overview-grid.compact .metric-card {
+  min-height: 74px;
+  padding: 10px;
+}
+.app-sidebar .overview-grid.compact .metric-card:nth-child(n + 3) {
+  display: none;
+}
+.app-sidebar .overview-grid.compact .metric-card strong {
+  font-size: 18px;
+}
+.app-sidebar .overview-grid.compact .metric-card small,
+.app-sidebar .overview-grid.compact .metric-status,
+.app-sidebar .overview-grid.compact .metric-mark {
+  display: none;
+}
+.app-sidebar.collapsed .overview-grid.compact {
+  display: block;
+  margin: 4px 0 12px;
+}
+.app-sidebar.collapsed .overview-grid.compact .metric-card {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 48px;
+  padding: 6px;
+}
+.app-sidebar.collapsed .overview-grid.compact .metric-card:nth-child(2) {
+  display: none;
+}
+.app-sidebar.collapsed .overview-grid.compact .metric-label,
+.app-sidebar.collapsed .overview-grid.compact .metric-card strong {
+  display: none;
+}
+.app-sidebar.collapsed .overview-grid.compact .metric-card::after {
+  color: #9dbdff;
+  content: "⌘";
+  font-size: 20px;
 }
 .sidebar-brand {
   align-items: center;
@@ -1652,6 +1700,7 @@ footer {
   border-top: 1px solid #1b2940;
   margin-top: 8px;
   padding: 12px 4px 0;
+  flex: 0 0 auto;
 }
 .sidebar-user .user-summary {
   border: 0;
