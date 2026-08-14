@@ -1549,7 +1549,7 @@ footer {
   flex-direction: column;
   min-height: 100vh;
   height: 100vh;
-  overflow: hidden;
+  overflow: visible;
   padding: 18px 12px 12px;
 }
 .app-sidebar .sidebar-nav {
@@ -1643,7 +1643,8 @@ footer {
 .app-sidebar .workspace-menu-popover {
   left: 0;
   right: auto;
-  width: 260px;
+  width: 280px;
+  z-index: 30;
 }
 .sidebar-nav {
   flex: 1;
@@ -1987,6 +1988,10 @@ footer {
 .app-sidebar.collapsed .workspace-menu {
   margin: 0 0 18px;
   width: 64px;
+}
+.app-sidebar.collapsed .workspace-menu-popover {
+  left: 74px;
+  top: 0;
 }
 .app-sidebar.collapsed .workspace-menu-trigger {
   border-radius: 12px;
