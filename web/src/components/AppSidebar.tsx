@@ -18,30 +18,9 @@ type NavGroup = { label: TranslationKey; items: NavItem[] };
 
 const groups: NavGroup[] = [
   {
-    label: "promptTools",
-    items: [
-      { icon: "◉", label: "promptDevelopment" },
-      { icon: "▷", label: "playground" },
-    ],
-  },
-  {
-    label: "evaluation",
-    items: [
-      { icon: "▤", label: "datasets" },
-      { icon: "♧", label: "evaluators" },
-      { icon: "◌", label: "experiments" },
-    ],
-  },
-  {
     label: "observability",
-    items: [
-      { icon: "⌘", label: "trace", active: true },
-      { icon: "⌁", label: "statistics" },
-      { icon: "▧", label: "automations" },
-    ],
+    items: [{ icon: "⌘", label: "trace", active: true }],
   },
-  { label: "models", items: [{ icon: "◈", label: "modelManagement" }] },
-  { label: "applications", items: [{ icon: "◇", label: "appRegistration" }] },
 ] as const;
 
 export function AppSidebar({
