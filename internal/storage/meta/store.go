@@ -26,6 +26,17 @@ type APIKey struct {
 	LastUsedAt                           *time.Time
 }
 
+type OAuthApp struct {
+	ID          string    `json:"id"`
+	ClientID    string    `json:"client_id"`
+	ProjectID   string    `json:"project_id"`
+	PublicKeyID string    `json:"public_key_id"`
+	PublicKey   string    `json:"public_key,omitempty"`
+	Enabled     bool      `json:"enabled"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 type Store struct{ db *sql.DB }
 
 func NewStore(db *sql.DB) *Store { return &Store{db: db} }
@@ -36,7 +47,7 @@ func HashToken(token string) string {
 
 func (s *Store) Migrate(ctx context.Context) error { return migrate(ctx, s.db) }
 func migrate(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'project', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER); CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash);`); err != nil {
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'project', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER); CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash); CREATE TABLE IF NOT EXISTS oauth_apps (id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL REFERENCES projects(id), public_key_id TEXT NOT NULL, public_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_apps_client_id ON oauth_apps(client_id); CREATE TABLE IF NOT EXISTS oauth_access_tokens (token_hash TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expiry ON oauth_access_tokens(expires_at);`); err != nil {
 		return err
 	}
 	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), trace_id TEXT NOT NULL, span_id TEXT NOT NULL DEFAULT '', annotation_key TEXT NOT NULL, score REAL, label TEXT NOT NULL DEFAULT '', comment TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_annotations_project_trace ON annotations(project_id,trace_id,created_at);`); err != nil {
@@ -66,6 +77,55 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	if hasRole == 0 {
 		_, err = db.ExecContext(ctx, `ALTER TABLE api_keys ADD COLUMN role TEXT NOT NULL DEFAULT 'project'`)
 	}
+	return err
+}
+
+func (s *Store) CreateOAuthApp(ctx context.Context, app OAuthApp) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_apps(id,client_id,project_id,public_key_id,public_key,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, app.ID, app.ClientID, app.ProjectID, app.PublicKeyID, app.PublicKey, app.Enabled, app.CreatedAt.UTC().UnixMicro(), app.UpdatedAt.UTC().UnixMicro())
+	return err
+}
+
+func (s *Store) OAuthAppByClientID(ctx context.Context, clientID string) (OAuthApp, error) {
+	var app OAuthApp
+	var enabled int
+	var created, updated int64
+	err := s.db.QueryRowContext(ctx, `SELECT id,client_id,project_id,public_key_id,public_key,enabled,created_at,updated_at FROM oauth_apps WHERE client_id=?`, clientID).Scan(&app.ID, &app.ClientID, &app.ProjectID, &app.PublicKeyID, &app.PublicKey, &enabled, &created, &updated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return app, ErrNotFound
+	}
+	if err != nil {
+		return app, err
+	}
+	app.Enabled = enabled != 0
+	app.CreatedAt = time.UnixMicro(created).UTC()
+	app.UpdatedAt = time.UnixMicro(updated).UTC()
+	return app, nil
+}
+
+func (s *Store) ListOAuthApps(ctx context.Context) ([]OAuthApp, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,client_id,project_id,public_key_id,public_key,enabled,created_at,updated_at FROM oauth_apps ORDER BY created_at,id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []OAuthApp
+	for rows.Next() {
+		var app OAuthApp
+		var enabled int
+		var created, updated int64
+		if err := rows.Scan(&app.ID, &app.ClientID, &app.ProjectID, &app.PublicKeyID, &app.PublicKey, &enabled, &created, &updated); err != nil {
+			return nil, err
+		}
+		app.Enabled = enabled != 0
+		app.CreatedAt = time.UnixMicro(created).UTC()
+		app.UpdatedAt = time.UnixMicro(updated).UTC()
+		result = append(result, app)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) CreateOAuthAccessToken(ctx context.Context, tokenHash, projectID string, expiresAt, createdAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_access_tokens(token_hash,project_id,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash, projectID, expiresAt.UTC().UnixMicro(), createdAt.UTC().UnixMicro())
 	return err
 }
 func (s *Store) CreateProject(ctx context.Context, p Project) error {
@@ -102,7 +162,20 @@ func (s *Store) Authenticate(ctx context.Context, token string) (APIKey, error) 
 	var revoked int
 	err := s.db.QueryRowContext(ctx, `SELECT id,project_id,name,token_hash,role,expires_at,revoked,last_used_at FROM api_keys WHERE token_hash=?`, HashToken(token)).Scan(&k.ID, &k.ProjectID, &k.Name, &k.TokenHash, &k.Role, &exp, &revoked, &last)
 	if errors.Is(err, sql.ErrNoRows) {
-		return k, ErrNotFound
+		var expires int64
+		err = s.db.QueryRowContext(ctx, `SELECT project_id,expires_at FROM oauth_access_tokens WHERE token_hash=? AND expires_at>?`, HashToken(token), time.Now().UTC().UnixMicro()).Scan(&k.ProjectID, &expires)
+		if errors.Is(err, sql.ErrNoRows) {
+			return APIKey{}, ErrNotFound
+		}
+		if err != nil {
+			return APIKey{}, err
+		}
+		k.ID = "oauth-access-token"
+		k.Name = "OAuth access token"
+		k.Role = "project"
+		expiry := time.UnixMicro(expires).UTC()
+		k.ExpiresAt = &expiry
+		return k, nil
 	}
 	if err != nil {
 		return k, err

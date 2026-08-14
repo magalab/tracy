@@ -52,6 +52,17 @@ curl http://localhost:8080/api/v1/dashboard \
   -H 'Authorization: Bearer tr_dev_key'
 ```
 
+CozeLoop JWT OAuth 需要先由 Admin API Key 注册 OAuth App（`public_key` 使用 RSA PEM 公钥）：
+
+```bash
+curl -X POST http://localhost:8080/api/v1/oauth/apps \
+  -H 'Authorization: Bearer tr_dev_key' \
+  -H 'Content-Type: application/json' \
+  -d '{"client_id":"coze-client","project_id":"default","public_key_id":"key-1","public_key":"-----BEGIN PUBLIC KEY-----\\n...\\n-----END PUBLIC KEY-----"}'
+```
+
+注册后，官方 SDK 可使用 `COZELOOP_JWT_OAUTH_CLIENT_ID`、`COZELOOP_JWT_OAUTH_PRIVATE_KEY` 和 `COZELOOP_JWT_OAUTH_PUBLIC_KEY_ID`，Tracy 会兼容 `/api/permission/oauth2/token` 的 JWT bearer 换 token 流程。
+
 ## HTTP contract
 
 - `GET /healthz` 和 `GET /readyz` 返回 200。
@@ -59,6 +70,7 @@ curl http://localhost:8080/api/v1/dashboard \
 - `POST /v1/loop/traces/ingest` 接受官方 CozeLoop Go SDK 的 `{ "spans": [...] }` payload，成功返回 `{"code":0,"msg":""}`。
 - `GET /api/v1/traces` 返回当前 Project 的 Trace 列表；`GET /api/v1/traces/{trace_id}` 返回单个 Trace。
 - `GET /api/v1/dashboard` 返回当前 Project 的请求量、错误率、Token 汇总、延迟分位数和按 span kind 的用量分布。
+- `POST /api/permission/oauth2/token` 支持 CozeLoop JWT bearer grant；Admin API Key 可通过 `POST/GET /api/v1/oauth/apps` 管理 OAuth App。
 - `/` 和其它前端路径返回嵌入式 React Trace Explorer。
 - Admin API Key 可调用 `GET /api/v1/projects`、`POST /api/v1/projects`、项目 Key 列表/创建和 `POST /api/v1/keys/{id}/revoke`。
 - Admin API Key 调用 `GET /api/v1/ingest/stats` 可查看 accepted、written、dropped、queue depth 和 write errors。

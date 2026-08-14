@@ -20,6 +20,8 @@ Dashboard 使用 `GET /api/v1/dashboard`，默认聚合最近 24 小时，也支
 
 Default API Key 是 admin key，可以创建 Project 和 project-scoped API Key。新 Key 的明文 token 只在创建响应中返回一次；数据库只存 token hash。撤销通过 `POST /api/v1/keys/{keyID}/revoke` 完成。
 
+JWT OAuth Compatibility 使用 metadata DB 的 `oauth_apps` 和 `oauth_access_tokens` 表。Admin 通过 `/api/v1/oauth/apps` 注册 `client_id`、Project、`public_key_id` 和 RSA PEM 公钥；`/api/permission/oauth2/token` 校验 Bearer JWT 的 RS256 签名及 `iss`、`aud`、`kid`、`iat`、`exp`、`jti` 后签发短期 project-scoped access token。JWT audience 必须等于客户端请求的 API host，access token 继续复用现有 `Authorization: Bearer` 认证链路。
+
 Annotation 存在 metadata DB 中，但所有查询都带当前 API Key 的 ProjectID。Annotation 的 `key` 必填，score 范围为 0 到 1；Trace Explorer 会在详情页加载、创建和删除 Annotation。
 
 ## Web 开发

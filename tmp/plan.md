@@ -38,6 +38,7 @@ npm run build
 ```text
 ✓ SQLite 1M/10M 多规模性能基线（当前 workload 下暂不需要 DuckDB）
 ✓ Dashboard Phase 13（当前用 span kind 作为用量分组维度）
+✓ JWT OAuth Compatibility：OAuth App metadata、RS256 JWT bearer exchange、project-scoped access token
 □ DuckDB/VictoriaTraces 仅在出现明确容量或查询瓶颈后评估
 ```
 
@@ -1202,7 +1203,7 @@ API 不暴露数据库细节。
 权限边界：始终按当前 API Key 的 project_id 过滤
 ```
 
-下一步进入 Phase 14：先稳定 Token API，再实现 CozeLoop JWT OAuth Compatibility。
+Phase 14 已完成：OAuth App 通过 Admin API 注册，JWT bearer exchange 复用现有 project-scoped authentication；下一阶段继续保持 SQLite 单进程边界，等待 benchmark 暴露真实瓶颈后再评估后备 Trace backend。
 
 ---
 
@@ -1479,10 +1480,10 @@ API Key → ingest span → SQLite → GetTrace
 26 reproducible SQLite benchmark harness
 27 benchmark + optimize SQLite
 28 decide whether DuckDB implementation is necessary
-29 Dashboard metrics API and Trace Explorer overview
-30 Dashboard time-range and Project-isolation contract tests
-31 stabilize API Token behavior
-32 CozeLoop JWT OAuth compatibility
+✓ 29 Dashboard metrics API and Trace Explorer overview
+✓ 30 Dashboard time-range and Project-isolation contract tests
+✓ 31 stabilize API Token behavior
+✓ 32 CozeLoop JWT OAuth compatibility
 ```
 
 第 28 步之前不要实现 DuckDB / VictoriaTraces。

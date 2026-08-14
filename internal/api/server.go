@@ -45,6 +45,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /readyz", s.ready)
 	mux.HandleFunc("POST /api/v1/ingest", s.ingest)
 	mux.HandleFunc("POST /v1/loop/traces/ingest", s.cozeLoopIngest)
+	mux.HandleFunc("POST /api/permission/oauth2/token", s.oauthToken)
 	mux.HandleFunc("GET /api/v1/traces/", s.getTrace)
 	mux.HandleFunc("GET /api/v1/traces", s.listTraces)
 	mux.HandleFunc("GET /api/v1/dashboard", s.dashboard)
@@ -57,6 +58,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/keys", s.listProjectKeys)
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/keys", s.createProjectKey)
 	mux.HandleFunc("POST /api/v1/keys/{keyID}/revoke", s.revokeKey)
+	mux.HandleFunc("GET /api/v1/oauth/apps", s.listOAuthApps)
+	mux.HandleFunc("POST /api/v1/oauth/apps", s.createOAuthApp)
 	mux.Handle("/", web.Handler())
 	return logging(mux, s.logger)
 }
