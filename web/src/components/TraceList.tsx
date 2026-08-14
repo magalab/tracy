@@ -120,13 +120,17 @@ export function TraceList({
               <div className="trace-title">
                 <strong>{trace.trace_id}</strong>
                 <span className={`status-badge ${trace.status}`}>
-                  {trace.status === "error" ? "Error" : "Healthy"}
+                  {trace.status === "error" ? t("errors") : t("healthyStatus")}
                 </span>
               </div>
               <small>{new Date(trace.start_time).toLocaleString()}</small>
               <div className="trace-facts">
-                <span>{trace.span_count} spans</span>
-                <span>{(trace.input_tokens + trace.output_tokens).toLocaleString()} tokens</span>
+                <span>
+                  {trace.span_count} {t("spans")}
+                </span>
+                <span>
+                  {(trace.input_tokens + trace.output_tokens).toLocaleString()} {t("tokens")}
+                </span>
               </div>
             </span>
             <span className="trace-meta">

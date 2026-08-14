@@ -33,8 +33,8 @@ button {
   flex-direction: column;
 }
 .topbar {
-  height: 88px;
-  padding: 18px 34px;
+  height: 68px;
+  padding: 10px 34px;
   border-bottom: 1px solid #1b2940;
   display: flex;
   align-items: center;
@@ -367,6 +367,9 @@ small {
   color: #9aabc4;
 }
 .status-dot {
+  align-self: flex-start;
+  display: block;
+  flex: 0 0 7px;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -377,6 +380,9 @@ small {
 .status-dot.error {
   background: #ff7d85;
   box-shadow: 0 0 0 3px #ff7d851a;
+}
+.trace-row > .status-dot {
+  justify-self: center;
 }
 .pill {
   color: #a9c4ed;
@@ -615,14 +621,14 @@ select {
   width: min(1480px, 100%);
   margin: 0 auto;
   flex: 1;
-  padding: 34px 34px 52px;
+  padding: 24px 34px 42px;
 }
 .overview-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 .overview-header h2 {
   color: #f0f4fb;
@@ -655,14 +661,14 @@ select {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-bottom: 26px;
+  margin-bottom: 18px;
 }
 .metric-card {
   background: linear-gradient(145deg, #101b2e, #0b1424);
   border: 1px solid #1f3452;
   border-radius: 10px;
-  min-height: 134px;
-  padding: 17px 18px;
+  min-height: 108px;
+  padding: 14px 16px;
   position: relative;
   transition:
     border-color 180ms,
@@ -686,7 +692,7 @@ select {
   font-size: 31px;
   letter-spacing: -0.045em;
   line-height: 1;
-  margin-top: 17px;
+  margin-top: 12px;
 }
 .metric-card em {
   color: #9db4d4;
@@ -724,7 +730,7 @@ select {
   border-radius: 12px;
   box-shadow: 0 24px 70px #00000026;
   grid-template-columns: minmax(320px, 34%) minmax(0, 1fr);
-  min-height: 640px;
+  min-height: 580px;
   overflow: hidden;
 }
 .list-panel {
