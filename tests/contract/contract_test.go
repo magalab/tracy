@@ -43,4 +43,8 @@ func TestHTTPContract(t *testing.T) {
 		t.Fatalf("unauthenticated status=%d", res.StatusCode)
 	}
 	_ = res.Body.Close()
+	cozeBody, _ := json.Marshal(map[string]any{"spans": []any{map[string]any{"started_at_micros": 1767225600000000, "duration_micros": 1, "trace_id": "contract-coze", "span_id": "contract-coze-span", "span_name": "compat", "span_type": "custom"}}})
+	cozeReq, _ := http.NewRequest(http.MethodPost, base+"/v1/loop/traces/ingest", bytes.NewReader(cozeBody)); cozeReq.Header.Set("Authorization", "Bearer "+key); cozeReq.Header.Set("Content-Type", "application/json")
+	res, err = http.DefaultClient.Do(cozeReq); if err != nil { t.Fatal(err) }; if res.StatusCode != http.StatusOK { t.Fatalf("cozeloop ingest status=%d", res.StatusCode) }; _ = res.Body.Close()
+	getReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/traces/contract-trace", nil); getReq.Header.Set("Authorization", "Bearer "+key); res, err = http.DefaultClient.Do(getReq); if err != nil { t.Fatal(err) }; if res.StatusCode != http.StatusOK { t.Fatalf("authenticated get status=%d", res.StatusCode) }; _ = res.Body.Close()
 }

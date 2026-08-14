@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/panda/tracy/compat/cozeloop"
 	"github.com/panda/tracy/internal/ingest"
 	"github.com/panda/tracy/internal/storage/meta"
 	domain "github.com/panda/tracy/internal/trace"
+	"github.com/panda/tracy/internal/web"
 )
 
 type Server struct {
@@ -37,8 +39,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.ready)
 	mux.HandleFunc("POST /api/v1/ingest", s.ingest)
+	mux.HandleFunc("POST /v1/loop/traces/ingest", s.cozeLoopIngest)
 	mux.HandleFunc("GET /api/v1/traces/", s.getTrace)
 	mux.HandleFunc("GET /api/v1/traces", s.listTraces)
+	mux.Handle("/", web.Handler())
 	return logging(mux, s.logger)
 }
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
@@ -84,6 +88,37 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"accepted": len(req.Spans)})
+}
+
+func (s *Server) cozeLoopIngest(w http.ResponseWriter, r *http.Request) {
+	key, err := s.authenticate(r)
+	if err != nil {
+		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
+		return
+	}
+	var req cozeloop.UploadSpanData
+	if err = json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&req); err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
+		return
+	}
+	spans, err := req.Map(key.ProjectID, time.Now().UTC())
+	if err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_span", err.Error())
+		return
+	}
+	if len(spans) == 0 {
+		errorJSON(w, http.StatusBadRequest, "empty_spans", "at least one span is required")
+		return
+	}
+	if err = s.writer.Enqueue(spans); err != nil {
+		if errors.Is(err, ingest.ErrFull) {
+			errorJSON(w, http.StatusTooManyRequests, "ingest_queue_full", "ingest queue is full")
+			return
+		}
+		errorJSON(w, http.StatusServiceUnavailable, "ingest_unavailable", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"code": 0, "msg": ""})
 }
 func (s *Server) getTrace(w http.ResponseWriter, r *http.Request) {
 	key, err := s.authenticate(r)

@@ -2,6 +2,41 @@
 
 > 执行原则：先验证最小可用链路和 CozeLoop 协议，再扩展 UI、性能和多后端。未来扩展不能阻塞 MVP。
 
+## 当前实现状态（2026-08-14）
+
+已完成：
+
+```text
+✓ Git 仓库和 Go 单 binary 骨架
+✓ 两个 SQLite 数据库、迁移和 WAL 配置
+✓ Default Project、API Key hash、Project 隔离
+✓ 有界队列、批量写入、幂等 ingest、GetTrace
+✓ Trace List、基础过滤和 cursor 分页
+✓ CozeLoop Go SDK trace ingest 兼容层
+✓ React Trace Explorer 和 Go embed.FS
+✓ SQLite benchmark harness 和基础 workload
+✓ README、AGENTS.md、开发说明和 contract test 基础
+```
+
+已通过验证：
+
+```text
+go test ./...
+go vet ./...
+go build ./cmd/server
+npm run build
+官方 CozeLoop Go SDK → 本地 Tracy → SQLite → Trace List
+```
+
+下一阶段：
+
+```text
+□ 持续写入 + 并发查询的完整 SQLite 性能基线
+□ 输入/输出大小限制和 writer 错误指标
+□ 更完整的 Project/API Key 管理 API
+□ DuckDB/VictoriaTraces 仅在 benchmark 证明必要后评估
+```
+
 ## 1. 项目目标
 
 开发一个轻量、自托管、单进程优先的 LLM/Agent Trace Observability 产品。

@@ -1,6 +1,6 @@
 # Tracy
 
-Tracy 是一个单进程优先、自托管的 LLM/Agent Trace Observability 服务。当前实现处于 MVP-0：Go HTTP 服务、SQLite metadata/trace 存储、Project/API Key 隔离、批量 ingest 和 GetTrace。
+Tracy 是一个单进程优先、自托管的 LLM/Agent Trace Observability 服务。当前实现已覆盖 MVP-1：Go HTTP 服务、SQLite metadata/trace 存储、Project/API Key 隔离、批量 ingest、Trace Explorer 和嵌入式 Web UI。
 
 ## 快速开始
 
@@ -8,6 +8,12 @@ Tracy 是一个单进程优先、自托管的 LLM/Agent Trace Observability 服�
 
 ```bash
 go run ./cmd/server
+```
+
+如果修改了前端源码，重新生成嵌入资源：
+
+```bash
+make build
 ```
 
 首次启动会创建 `data/meta.db` 和 `data/traces.db`，并将初始 API Key 只输出到启动日志。也可以预先设置 `TRACY_API_KEY`：
@@ -43,7 +49,9 @@ curl 'http://localhost:8080/api/v1/traces?limit=20&status=ok' \
 
 - `GET /healthz` 和 `GET /readyz` 返回 200。
 - `POST /api/v1/ingest` 接受 `{ "spans": [...] }`，成功返回 `202`，表示数据已进入内存队列。
+- `POST /v1/loop/traces/ingest` 接受官方 CozeLoop Go SDK 的 `{ "spans": [...] }` payload，成功返回 `{"code":0,"msg":""}`。
 - `GET /api/v1/traces` 返回当前 Project 的 Trace 列表；`GET /api/v1/traces/{trace_id}` 返回单个 Trace。
+- `/` 和其它前端路径返回嵌入式 React Trace Explorer。
 - 错误格式固定为 `{ "error": { "code": "...", "message": "..." } }`。
 - API 使用 `Authorization: Bearer <token>`；Key 只绑定一个 Project。
 
@@ -58,4 +66,5 @@ go test ./...
 go vet ./...
 ```
 
-架构和后续阶段见 [`tmp/plan.md`](tmp/plan.md)，协议边界和本地开发约定见 [`docs/development.md`](docs/development.md)。
+架构和后续阶段见 [`tmp/plan.md`](tmp/plan.md)，协议边界和本地开发约定见 [`docs/development.md`](docs/development.md)。CozeLoop 兼容协议说明见 [`docs/cozeloop-compat.md`](docs/cozeloop-compat.md)。
+SQLite benchmark 说明见 [`bench/README.md`](bench/README.md)。
