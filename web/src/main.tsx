@@ -52,12 +52,7 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-lockup">
-          <img className="brand-mark" src="/tracy-mark.svg" alt="Tracy" />
-          <div>
-            <h1>
-              Tracy <span>{t("traceExplorer")}</span>
-            </h1>
-          </div>
+          <img className="brand-mark" src="/tracy.svg" alt="Tracy" />
         </div>
         <div className="topbar-actions">
           <div className="preference-actions">
