@@ -92,3 +92,4 @@ go vet ./...
 
 架构和后续阶段见 [`tmp/plan.md`](tmp/plan.md)，协议边界和本地开发约定见 [`docs/development.md`](docs/development.md)。CozeLoop 兼容协议说明见 [`docs/cozeloop-compat.md`](docs/cozeloop-compat.md)。
 SQLite benchmark 说明见 [`bench/README.md`](bench/README.md)。
+HTTP API 的 OpenAPI 3.0 描述见 [`docs/openapi.yaml`](docs/openapi.yaml)。

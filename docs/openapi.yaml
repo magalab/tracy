@@ -1,0 +1,482 @@
+openapi: 3.0.3
+info:
+  title: Tracy API
+  version: 0.1.0
+  description: Self-hosted LLM and agent trace observability API.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      operationId: health
+      security: []
+      responses:
+        '200':
+          description: Service is alive.
+  /readyz:
+    get:
+      operationId: ready
+      security: []
+      responses:
+        '200':
+          description: Service is ready.
+  /api/v1/ingest:
+    post:
+      operationId: ingestSpans
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spans]
+              properties:
+                spans:
+                  type: array
+                  minItems: 1
+                  items:
+                    $ref: '#/components/schemas/SpanInput'
+      responses:
+        '202':
+          description: Spans accepted into the bounded ingest queue.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          description: Ingest queue is full.
+  /v1/loop/traces/ingest:
+    post:
+      operationId: ingestCozeLoopSpans
+      description: CozeLoop-compatible trace upload endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [spans]
+              properties:
+                spans:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+      responses:
+        '200':
+          description: Upload accepted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/traces:
+    get:
+      operationId: listTraces
+      parameters:
+        - $ref: '#/components/parameters/Status'
+        - $ref: '#/components/parameters/Kind'
+        - $ref: '#/components/parameters/Name'
+        - $ref: '#/components/parameters/TraceID'
+        - $ref: '#/components/parameters/StartTime'
+        - $ref: '#/components/parameters/EndTime'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: min_duration_ms
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: max_duration_ms
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: min_tokens
+          in: query
+          schema: { type: integer, minimum: 0 }
+        - name: max_tokens
+          in: query
+          schema: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Current project's trace summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TracePage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/traces/{traceID}:
+    get:
+      operationId: getTrace
+      parameters:
+        - $ref: '#/components/parameters/TracePathID'
+      responses:
+        '200':
+          description: Trace spans.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trace_id, spans]
+                properties:
+                  trace_id: { type: string }
+                  spans:
+                    type: array
+                    items: { $ref: '#/components/schemas/Span' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Trace not found.
+  /api/v1/traces/{traceID}/annotations:
+    parameters:
+      - $ref: '#/components/parameters/TracePathID'
+    get:
+      operationId: listAnnotations
+      responses:
+        '200':
+          description: Feedback annotations for the trace.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Annotation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Trace not found. }
+    post:
+      operationId: createAnnotation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnotationInput'
+      responses:
+        '201':
+          description: Annotation created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Annotation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/annotations/{annotationID}:
+    delete:
+      operationId: deleteAnnotation
+      parameters:
+        - name: annotationID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Annotation deleted.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Annotation not found. }
+  /api/v1/dashboard:
+    get:
+      operationId: dashboard
+      parameters:
+        - $ref: '#/components/parameters/StartTime'
+        - $ref: '#/components/parameters/EndTime'
+      responses:
+        '200':
+          description: Current project's metrics, defaulting to the last 24 hours.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardMetrics' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/ingest/stats:
+    get:
+      operationId: ingestStats
+      description: Admin-only writer and queue metrics.
+      responses:
+        '200': { description: Ingest statistics. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/projects:
+    get:
+      operationId: listProjects
+      description: Admin-only project list.
+      responses:
+        '200': { description: Projects. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createProject
+      description: Creates a project and returns its initial API key once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 128 }
+                key_name: { type: string }
+      responses:
+        '201': { description: Project and initial API key created. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/projects/{projectID}/keys:
+    parameters:
+      - name: projectID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listProjectKeys
+      responses:
+        '200': { description: Project API keys without plaintext tokens. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createProjectKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                expires_at: { type: string, format: date-time }
+      responses:
+        '201': { description: API key created; plaintext token is returned once. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/keys/{keyID}/revoke:
+    post:
+      operationId: revokeAPIKey
+      parameters:
+        - name: keyID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: API key revoked. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: API key not found. }
+  /api/v1/oauth/apps:
+    get:
+      operationId: listOAuthApps
+      description: Admin-only OAuth App list.
+      responses:
+        '200': { description: OAuth Apps. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createOAuthApp
+      description: Registers an RSA public key for a CozeLoop JWT OAuth client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id, project_id, public_key_id, public_key]
+              properties:
+                client_id: { type: string }
+                project_id: { type: string }
+                public_key_id: { type: string }
+                public_key: { type: string, description: RSA PEM public key }
+                enabled: { type: boolean, default: true }
+      responses:
+        '201': { description: OAuth App registered. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/permission/oauth2/token:
+    post:
+      operationId: exchangeJWTBearerToken
+      description: CozeLoop-compatible RS256 JWT bearer exchange.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [client_id, grant_type]
+              properties:
+                client_id: { type: string }
+                grant_type:
+                  type: string
+                  enum: ['urn:ietf:params:oauth:grant-type:jwt-bearer']
+                duration_seconds: { type: integer, minimum: 60, maximum: 86400, default: 900 }
+      responses:
+        '200':
+          description: Short-lived project-scoped access token.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in]
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, enum: [Bearer] }
+                  expires_in: { type: integer }
+        '400': { description: OAuth error. }
+        '401': { description: OAuth error. }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    TracePathID:
+      name: traceID
+      in: path
+      required: true
+      schema: { type: string }
+    TraceID:
+      name: trace_id
+      in: query
+      schema: { type: string }
+    Status:
+      name: status
+      in: query
+      schema: { type: string }
+    Kind:
+      name: kind
+      in: query
+      schema: { type: string }
+    Name:
+      name: name
+      in: query
+      schema: { type: string }
+    StartTime:
+      name: start_time
+      in: query
+      schema: { type: string, format: date-time }
+    EndTime:
+      name: end_time
+      in: query
+      schema: { type: string, format: date-time }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+  responses:
+    BadRequest:
+      description: Invalid request or query.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Admin API key required.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PayloadTooLarge:
+      description: Payload exceeds configured limits.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+    SpanInput:
+      type: object
+      required: [trace_id, span_id, name, start_time]
+      properties:
+        trace_id: { type: string }
+        span_id: { type: string }
+        parent_span_id: { type: string }
+        name: { type: string }
+        kind: { type: string }
+        start_time: { type: string, format: date-time }
+        received_at: { type: string, format: date-time }
+        duration: { type: integer, format: int64, description: Nanoseconds }
+        status: { type: string }
+        status_message: { type: string }
+        input: { type: string }
+        output: { type: string }
+        input_tokens: { type: integer, format: int64 }
+        output_tokens: { type: integer, format: int64 }
+        attributes: { type: object, additionalProperties: true }
+    Span:
+      allOf:
+        - $ref: '#/components/schemas/SpanInput'
+        - type: object
+          properties:
+            project_id: { type: string }
+    TraceSummary:
+      type: object
+      required: [project_id, trace_id, start_time, end_time, span_count, status]
+      properties:
+        project_id: { type: string }
+        trace_id: { type: string }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+        span_count: { type: integer }
+        status: { type: string }
+        input_tokens: { type: integer, format: int64 }
+        output_tokens: { type: integer, format: int64 }
+    TracePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TraceSummary' }
+        next_cursor: { type: string }
+    AnnotationInput:
+      type: object
+      required: [key]
+      properties:
+        span_id: { type: string }
+        key: { type: string }
+        score: { type: number, minimum: 0, maximum: 1 }
+        label: { type: string }
+        comment: { type: string }
+    Annotation:
+      allOf:
+        - $ref: '#/components/schemas/AnnotationInput'
+        - type: object
+          properties:
+            id: { type: string }
+            project_id: { type: string }
+            trace_id: { type: string }
+            created_by: { type: string }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    DashboardMetrics:
+      type: object
+      properties:
+        project_id: { type: string }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+        request_count: { type: integer, format: int64 }
+        error_count: { type: integer, format: int64 }
+        error_rate: { type: number }
+        input_tokens: { type: integer, format: int64 }
+        output_tokens: { type: integer, format: int64 }
+        avg_latency_ms: { type: number }
+        p50_latency_ms: { type: number }
+        p95_latency_ms: { type: number }
+        p99_latency_ms: { type: number }
+        usage_breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string }
+              span_count: { type: integer, format: int64 }
+              input_tokens: { type: integer, format: int64 }
+              output_tokens: { type: integer, format: int64 }

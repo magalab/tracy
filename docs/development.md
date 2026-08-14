@@ -26,6 +26,8 @@ Annotation 存在 metadata DB 中，但所有查询都带当前 API Key 的 Proj
 
 ## Web 开发
 
+HTTP contract 的机器可读描述位于 [`docs/openapi.yaml`](openapi.yaml)。新增 endpoint 时同步更新该文件，并保持错误响应和 Project 隔离语义与 contract tests 一致。
+
 前端源码位于 `web/`，构建产物输出到 `internal/web/dist/`，由 Go `embed.FS` 编入 binary。开发前端时可运行：
 
 ```bash

@@ -39,6 +39,7 @@ npm run build
 ✓ SQLite 1M/10M 多规模性能基线（当前 workload 下暂不需要 DuckDB）
 ✓ Dashboard Phase 13（当前用 span kind 作为用量分组维度）
 ✓ JWT OAuth Compatibility：OAuth App metadata、RS256 JWT bearer exchange、project-scoped access token
+✓ OpenAPI 3.0 API 描述（覆盖当前 15 个 HTTP path）
 □ DuckDB/VictoriaTraces 仅在出现明确容量或查询瓶颈后评估
 ```
 
@@ -1484,6 +1485,7 @@ API Key → ingest span → SQLite → GetTrace
 ✓ 30 Dashboard time-range and Project-isolation contract tests
 ✓ 31 stabilize API Token behavior
 ✓ 32 CozeLoop JWT OAuth compatibility
+✓ 33 OpenAPI 3.0 contract document
 ```
 
 第 28 步之前不要实现 DuckDB / VictoriaTraces。
