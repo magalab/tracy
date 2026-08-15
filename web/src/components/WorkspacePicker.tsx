@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { usePreferences } from "../i18n";
 import type { Workspace } from "../types";
-import { Button, Form } from "@douyinfe/semi-ui";
+import Button from "@douyinfe/semi-ui/lib/es/button";
+import { Form } from "@douyinfe/semi-ui/lib/es/form";
 
 type WorkspacePickerProps = {
   workspaces: Workspace[];
   activeID: string;
+  error?: string;
   onSelect: (id: string) => Promise<void>;
   onCreate: (name: string) => Promise<void>;
 };
@@ -13,6 +15,7 @@ type WorkspacePickerProps = {
 export function WorkspacePicker({
   workspaces,
   activeID,
+  error,
   onSelect,
   onCreate,
 }: WorkspacePickerProps) {
@@ -37,11 +40,17 @@ export function WorkspacePicker({
         <img className="auth-brand-mark" src="/tracy.svg" alt="Tracy" />
         <span className="eyebrow">{t("workspaceLabel")}</span>
         <h1>{t("chooseWorkspace")}</h1>
+        {error && (
+          <div className="auth-error" role="alert">
+            {error}
+          </div>
+        )}
         <div className="workspace-list">
           {workspaces.map((workspace) => (
             <button
               className={`workspace-option ${activeID === workspace.id ? "active" : ""}`}
               key={workspace.id}
+              type="button"
               onClick={() => void onSelect(workspace.id)}
             >
               <span className="workspace-icon">{workspace.name.slice(0, 1).toUpperCase()}</span>

@@ -3,7 +3,9 @@ package contract
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -24,6 +26,36 @@ func TestHTTPContract(t *testing.T) {
 		t.Fatalf("health status=%d", res.StatusCode)
 	}
 	_ = res.Body.Close()
+	res, err = http.Get(base + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("ready status=%d", res.StatusCode)
+	}
+	_ = res.Body.Close()
+	for _, path := range []string{"/api/v1/does-not-exist", "/api"} {
+		unknown, err := http.Get(base + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if unknown.StatusCode != http.StatusNotFound || !strings.Contains(unknown.Header.Get("Content-Type"), "application/json") {
+			t.Fatalf("unknown API path %s status=%d content-type=%q", path, unknown.StatusCode, unknown.Header.Get("Content-Type"))
+		}
+		_ = unknown.Body.Close()
+	}
+	wrongMethod, err := http.NewRequest(http.MethodPut, base+"/api/v1/ingest", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongResp, err := http.DefaultClient.Do(wrongMethod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if (wrongResp.StatusCode != http.StatusNotFound && wrongResp.StatusCode != http.StatusMethodNotAllowed) || !strings.Contains(wrongResp.Header.Get("Content-Type"), "application/json") {
+		t.Fatalf("wrong method status=%d content-type=%q", wrongResp.StatusCode, wrongResp.Header.Get("Content-Type"))
+	}
+	_ = wrongResp.Body.Close()
 	body, _ := json.Marshal(map[string]any{"spans": []any{map[string]any{"trace_id": "contract-trace", "span_id": "contract-span", "name": "contract", "kind": "test", "start_time": "2026-01-01T00:00:00Z", "duration": 1000}}})
 	req, _ := http.NewRequest(http.MethodPost, base+"/api/v1/ingest", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+key)
@@ -76,6 +108,59 @@ func TestHTTPContract(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
+	largeSpans := make([]map[string]any, 101)
+	for index := range largeSpans {
+		largeSpans[index] = map[string]any{"trace_id": "contract-large-trace", "span_id": fmt.Sprintf("contract-span-%03d", index), "name": "contract", "kind": "test", "start_time": "2026-01-01T00:00:00Z", "duration": 1000}
+	}
+	largeBody, _ := json.Marshal(map[string]any{"spans": largeSpans})
+	largeReq, _ := http.NewRequest(http.MethodPost, base+"/api/v1/ingest", bytes.NewReader(largeBody))
+	largeReq.Header.Set("Authorization", "Bearer "+key)
+	largeReq.Header.Set("Content-Type", "application/json")
+	largeResp, err := http.DefaultClient.Do(largeReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if largeResp.StatusCode != http.StatusAccepted {
+		t.Fatalf("large ingest status=%d", largeResp.StatusCode)
+	}
+	_ = largeResp.Body.Close()
+	var firstPage struct {
+		Spans      []any  `json:"spans"`
+		NextCursor string `json:"next_cursor"`
+	}
+	for attempt := 0; attempt < 20; attempt++ {
+		pageReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/traces/contract-large-trace?limit=100", nil)
+		pageReq.Header.Set("Authorization", "Bearer "+key)
+		pageResp, requestErr := http.DefaultClient.Do(pageReq)
+		if requestErr != nil {
+			t.Fatal(requestErr)
+		}
+		if pageResp.StatusCode == http.StatusOK {
+			if err := json.NewDecoder(pageResp.Body).Decode(&firstPage); err != nil {
+				t.Fatal(err)
+			}
+			_ = pageResp.Body.Close()
+			if len(firstPage.Spans) == 100 && firstPage.NextCursor != "" {
+				break
+			}
+		} else {
+			_ = pageResp.Body.Close()
+		}
+		if attempt == 19 {
+			t.Fatalf("trace page did not return a cursor: spans=%d cursor=%q", len(firstPage.Spans), firstPage.NextCursor)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	secondReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/traces/contract-large-trace?limit=100&cursor="+url.QueryEscape(firstPage.NextCursor), nil)
+	secondReq.Header.Set("Authorization", "Bearer "+key)
+	secondResp, err := http.DefaultClient.Do(secondReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if secondResp.StatusCode != http.StatusOK {
+		t.Fatalf("second trace page status=%d", secondResp.StatusCode)
+	}
+	_ = secondResp.Body.Close()
 	dashboardReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/dashboard?start_time=2025-12-31T00:00:00Z&end_time=2026-01-02T00:00:00Z", nil)
 	dashboardReq.Header.Set("Authorization", "Bearer "+key)
 	dashboardResp, err := http.DefaultClient.Do(dashboardReq)
@@ -95,47 +180,41 @@ func TestHTTPContract(t *testing.T) {
 	if dashboard.RequestCount < 1 {
 		t.Fatalf("dashboard request count=%d", dashboard.RequestCount)
 	}
-	annotationBody, _ := json.Marshal(map[string]any{"key": "quality", "score": 0.9, "label": "good", "comment": "contract annotation"})
-	annotationReq, _ := http.NewRequest(http.MethodPost, base+"/api/v1/traces/contract-trace/annotations", bytes.NewReader(annotationBody))
-	annotationReq.Header.Set("Authorization", "Bearer "+key)
-	annotationReq.Header.Set("Content-Type", "application/json")
-	annotationResp, err := http.DefaultClient.Do(annotationReq)
+}
+
+func TestLogoutContract(t *testing.T) {
+	base := strings.TrimRight(os.Getenv("BASE_URL"), "/")
+	email, password := os.Getenv("TRACY_TEST_EMAIL"), os.Getenv("TRACY_TEST_PASSWORD")
+	if base == "" || email == "" || password == "" {
+		t.Skip("set BASE_URL, TRACY_TEST_EMAIL and TRACY_TEST_PASSWORD to run session contract tests")
+	}
+	body, _ := json.Marshal(map[string]string{"email": email, "password": password})
+	login, _ := http.NewRequest(http.MethodPost, base+"/api/v1/auth/login", bytes.NewReader(body))
+	login.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(login)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if annotationResp.StatusCode != http.StatusCreated {
-		t.Fatalf("annotation create status=%d", annotationResp.StatusCode)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login status=%d", resp.StatusCode)
 	}
-	var created struct {
-		ID string `json:"id"`
+	var session struct {
+		Token string `json:"access_token"`
 	}
-	if err := json.NewDecoder(annotationResp.Body).Decode(&created); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
 		t.Fatal(err)
 	}
-	_ = annotationResp.Body.Close()
-	if created.ID == "" {
-		t.Fatal("annotation id missing")
-	}
-	annotationListReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/traces/contract-trace/annotations", nil)
-	annotationListReq.Header.Set("Authorization", "Bearer "+key)
-	annotationListResp, err := http.DefaultClient.Do(annotationListReq)
+	logout, _ := http.NewRequest(http.MethodPost, base+"/api/v1/auth/logout", nil)
+	logout.Header.Set("Authorization", "Bearer "+session.Token)
+	logoutResp, err := http.DefaultClient.Do(logout)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if annotationListResp.StatusCode != http.StatusOK {
-		t.Fatalf("annotation list status=%d", annotationListResp.StatusCode)
+	defer logoutResp.Body.Close()
+	if logoutResp.StatusCode != http.StatusOK {
+		t.Fatalf("logout status=%d", logoutResp.StatusCode)
 	}
-	_ = annotationListResp.Body.Close()
-	annotationDeleteReq, _ := http.NewRequest(http.MethodDelete, base+"/api/v1/annotations/"+created.ID, nil)
-	annotationDeleteReq.Header.Set("Authorization", "Bearer "+key)
-	annotationDeleteResp, err := http.DefaultClient.Do(annotationDeleteReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if annotationDeleteResp.StatusCode != http.StatusOK {
-		t.Fatalf("annotation delete status=%d", annotationDeleteResp.StatusCode)
-	}
-	_ = annotationDeleteResp.Body.Close()
 }
 
 func TestAdminContract(t *testing.T) {

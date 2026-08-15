@@ -6,9 +6,10 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"strings"
+	"sync"
 	"time"
 
-	"github.com/panda/tracy/internal/annotation"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -54,9 +55,15 @@ type OAuthApp struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db             *sql.DB
+	lastUsedMu     sync.Mutex
+	lastUsedMemory map[string]time.Time
+}
 
-func NewStore(db *sql.DB) *Store { return &Store{db: db} }
+var ErrAlreadyUsed = errors.New("OAuth JWT has already been used")
+
+func NewStore(db *sql.DB) *Store { return &Store{db: db, lastUsedMemory: make(map[string]time.Time)} }
 func HashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
@@ -69,10 +76,7 @@ func HashPassword(password string) (string, error) {
 
 func (s *Store) Migrate(ctx context.Context) error { return migrate(ctx, s.db) }
 func migrate(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS workspace_members (workspace_id TEXT NOT NULL REFERENCES projects(id), user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL DEFAULT 'member', created_at INTEGER NOT NULL, PRIMARY KEY(workspace_id,user_id)); CREATE TABLE IF NOT EXISTS user_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), workspace_id TEXT NOT NULL REFERENCES projects(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id); CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'project', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER); CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash); CREATE TABLE IF NOT EXISTS oauth_apps (id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL REFERENCES projects(id), public_key_id TEXT NOT NULL, public_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_apps_client_id ON oauth_apps(client_id); CREATE TABLE IF NOT EXISTS oauth_access_tokens (token_hash TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expiry ON oauth_access_tokens(expires_at);`); err != nil {
-		return err
-	}
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS annotations (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), trace_id TEXT NOT NULL, span_id TEXT NOT NULL DEFAULT '', annotation_key TEXT NOT NULL, score REAL, label TEXT NOT NULL DEFAULT '', comment TEXT NOT NULL DEFAULT '', created_by TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_annotations_project_trace ON annotations(project_id,trace_id,created_at);`); err != nil {
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS workspace_members (workspace_id TEXT NOT NULL REFERENCES projects(id), user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL DEFAULT 'member', created_at INTEGER NOT NULL, PRIMARY KEY(workspace_id,user_id)); CREATE TABLE IF NOT EXISTS user_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), workspace_id TEXT NOT NULL REFERENCES projects(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id); CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'project', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER); CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash); CREATE TABLE IF NOT EXISTS oauth_apps (id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL REFERENCES projects(id), public_key_id TEXT NOT NULL, public_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_apps_client_id ON oauth_apps(client_id); CREATE TABLE IF NOT EXISTS oauth_access_tokens (token_hash TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expiry ON oauth_access_tokens(expires_at); CREATE TABLE IF NOT EXISTS oauth_jti (client_id TEXT NOT NULL, jti TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(client_id,jti)); CREATE INDEX IF NOT EXISTS idx_oauth_jti_expiry ON oauth_jti(expires_at);`); err != nil {
 		return err
 	}
 	var hasRole int
@@ -155,6 +159,51 @@ func (s *Store) CreateProject(ctx context.Context, p Project) error {
 	return err
 }
 
+func (s *Store) CreateWorkspaceForUser(ctx context.Context, p Project, member WorkspaceMember) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `INSERT INTO projects(id,name,created_at,updated_at) VALUES(?,?,?,?)`, p.ID, p.Name, p.CreatedAt.UTC().UnixMicro(), p.UpdatedAt.UTC().UnixMicro()); err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_members(workspace_id,user_id,role,created_at) VALUES(?,?,?,?)`, member.WorkspaceID, member.UserID, member.Role, member.CreatedAt.UTC().UnixMicro()); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) CreateProjectWithAPIKey(ctx context.Context, p Project, k APIKey) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `INSERT INTO projects(id,name,created_at,updated_at) VALUES(?,?,?,?)`, p.ID, p.Name, p.CreatedAt.UTC().UnixMicro(), p.UpdatedAt.UTC().UnixMicro()); err != nil {
+		return err
+	}
+	var exp any
+	if k.ExpiresAt != nil {
+		exp = k.ExpiresAt.UTC().UnixMicro()
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO api_keys(id,project_id,name,token_hash,role,expires_at,revoked) VALUES(?,?,?,?,?,?,?)`, k.ID, k.ProjectID, k.Name, k.TokenHash, k.Role, exp, k.Revoked); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ConsumeOAuthJTI(ctx context.Context, clientID, jti string, expiresAt, createdAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_jti(client_id,jti,expires_at,created_at) VALUES(?,?,?,?)`, clientID, jti, expiresAt.UTC().UnixMicro(), createdAt.UTC().UnixMicro())
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return ErrAlreadyUsed
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Store) CreateUser(ctx context.Context, user User) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO users(id,email,name,password_hash,created_at) VALUES(?,?,?,?,?)`, user.ID, user.Email, user.Name, user.PasswordHash, user.CreatedAt.UTC().UnixMicro())
 	return err
@@ -196,9 +245,15 @@ func (s *Store) CreateSession(ctx context.Context, tokenHash, userID, workspaceI
 	return err
 }
 
+func (s *Store) DeleteSession(ctx context.Context, tokenHash string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM user_sessions WHERE token_hash=?`, tokenHash)
+	return err
+}
+
 func (s *Store) AuthenticateUser(ctx context.Context, email, password string) (User, error) {
 	user, err := s.UserByEmail(ctx, email)
 	if err != nil {
+		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy"), []byte(password))
 		return User{}, err
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
@@ -330,8 +385,23 @@ func (s *Store) Authenticate(ctx context.Context, token string) (APIKey, error) 
 	if k.Revoked || k.ExpiresAt != nil && k.ExpiresAt.Before(time.Now().UTC()) {
 		return APIKey{}, ErrNotFound
 	}
-	_, _ = s.db.ExecContext(ctx, `UPDATE api_keys SET last_used_at=? WHERE id=?`, time.Now().UTC().UnixMicro(), k.ID)
+	now := time.Now().UTC()
+	s.lastUsedMu.Lock()
+	lastUsed, shouldUpdate := s.lastUsedMemory[k.ID], false
+	if lastUsed.IsZero() || now.Sub(lastUsed) >= time.Minute {
+		s.lastUsedMemory[k.ID] = now
+		shouldUpdate = true
+	}
+	s.lastUsedMu.Unlock()
+	if shouldUpdate {
+		_, _ = s.db.ExecContext(ctx, `UPDATE api_keys SET last_used_at=? WHERE id=?`, now.UnixMicro(), k.ID)
+	}
 	return k, nil
+}
+
+func (s *Store) CleanupExpired(ctx context.Context, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM user_sessions WHERE expires_at<=?; DELETE FROM oauth_access_tokens WHERE expires_at<=?; DELETE FROM oauth_jti WHERE expires_at<=?`, now.UTC().UnixMicro(), now.UTC().UnixMicro(), now.UTC().UnixMicro())
+	return err
 }
 
 func (s *Store) EnsureAdmin(ctx context.Context, keyID string) error {
@@ -396,52 +466,6 @@ func (s *Store) ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, er
 
 func (s *Store) RevokeAPIKey(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx, `UPDATE api_keys SET revoked=1 WHERE id=?`, id)
-	if err != nil {
-		return err
-	}
-	count, err := result.RowsAffected()
-	if err == nil && count == 0 {
-		return ErrNotFound
-	}
-	return err
-}
-
-func (s *Store) CreateAnnotation(ctx context.Context, item annotation.Annotation) error {
-	var score any
-	if item.Score != nil {
-		score = *item.Score
-	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO annotations(id,project_id,trace_id,span_id,annotation_key,score,label,comment,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`, item.ID, item.ProjectID, item.TraceID, item.SpanID, item.Key, score, item.Label, item.Comment, item.CreatedBy, item.CreatedAt.UTC().UnixMicro(), item.UpdatedAt.UTC().UnixMicro())
-	return err
-}
-
-func (s *Store) ListAnnotations(ctx context.Context, projectID, traceID string) ([]annotation.Annotation, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,project_id,trace_id,span_id,annotation_key,score,label,comment,created_by,created_at,updated_at FROM annotations WHERE project_id=? AND trace_id=? ORDER BY created_at,id`, projectID, traceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	result := make([]annotation.Annotation, 0)
-	for rows.Next() {
-		var item annotation.Annotation
-		var score sql.NullFloat64
-		var created, updated int64
-		if err := rows.Scan(&item.ID, &item.ProjectID, &item.TraceID, &item.SpanID, &item.Key, &score, &item.Label, &item.Comment, &item.CreatedBy, &created, &updated); err != nil {
-			return nil, err
-		}
-		if score.Valid {
-			v := score.Float64
-			item.Score = &v
-		}
-		item.CreatedAt = time.UnixMicro(created).UTC()
-		item.UpdatedAt = time.UnixMicro(updated).UTC()
-		result = append(result, item)
-	}
-	return result, rows.Err()
-}
-
-func (s *Store) DeleteAnnotation(ctx context.Context, projectID, id string) error {
-	result, err := s.db.ExecContext(ctx, `DELETE FROM annotations WHERE project_id=? AND id=?`, projectID, id)
 	if err != nil {
 		return err
 	}

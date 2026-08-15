@@ -41,12 +41,22 @@ paths:
           description: User session and the user's active Workspace.
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '429':
+          description: Too many login attempts from the source.
   /api/v1/auth/me:
     get:
       operationId: currentUser
       responses:
         '200':
           description: Current user and active Workspace.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      responses:
+        '200':
+          description: The current user session was revoked.
         '401':
           $ref: '#/components/responses/Unauthorized'
   /api/v1/workspaces:
@@ -109,8 +119,6 @@ paths:
           description: Spans accepted into the bounded ingest queue.
         '401':
           $ref: '#/components/responses/Unauthorized'
-        '413':
-          $ref: '#/components/responses/PayloadTooLarge'
         '429':
           description: Ingest queue is full.
   /v1/loop/traces/ingest:
@@ -171,8 +179,15 @@ paths:
   /api/v1/traces/{traceID}:
     get:
       operationId: getTrace
+      description: Returns a paginated trace. Use next_cursor to read large traces without loading the entire trace into one response.
       parameters:
         - $ref: '#/components/parameters/TracePathID'
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+        - name: cursor
+          in: query
+          schema: { type: string }
       responses:
         '200':
           description: Trace spans.
@@ -186,57 +201,11 @@ paths:
                   spans:
                     type: array
                     items: { $ref: '#/components/schemas/Span' }
+                  next_cursor: { type: string }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
           description: Trace not found.
-  /api/v1/traces/{traceID}/annotations:
-    parameters:
-      - $ref: '#/components/parameters/TracePathID'
-    get:
-      operationId: listAnnotations
-      responses:
-        '200':
-          description: Feedback annotations for the trace.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/Annotation' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { description: Trace not found. }
-    post:
-      operationId: createAnnotation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AnnotationInput'
-      responses:
-        '201':
-          description: Annotation created.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Annotation' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-  /api/v1/annotations/{annotationID}:
-    delete:
-      operationId: deleteAnnotation
-      parameters:
-        - name: annotationID
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Annotation deleted.
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { description: Annotation not found. }
   /api/v1/dashboard:
     get:
       operationId: dashboard
@@ -370,7 +339,7 @@ paths:
                 grant_type:
                   type: string
                   enum: ['urn:ietf:params:oauth:grant-type:jwt-bearer']
-                duration_seconds: { type: integer, minimum: 60, maximum: 86400, default: 900 }
+                duration_seconds: { type: integer, minimum: 0, maximum: 86400, default: 900, description: Omit or set to 0 for the default 900 seconds; explicit values must be between 60 and 86400. }
       responses:
         '200':
           description: Short-lived project-scoped access token.
@@ -502,26 +471,6 @@ components:
           type: array
           items: { $ref: '#/components/schemas/TraceSummary' }
         next_cursor: { type: string }
-    AnnotationInput:
-      type: object
-      required: [key]
-      properties:
-        span_id: { type: string }
-        key: { type: string }
-        score: { type: number, minimum: 0, maximum: 1 }
-        label: { type: string }
-        comment: { type: string }
-    Annotation:
-      allOf:
-        - $ref: '#/components/schemas/AnnotationInput'
-        - type: object
-          properties:
-            id: { type: string }
-            project_id: { type: string }
-            trace_id: { type: string }
-            created_by: { type: string }
-            created_at: { type: string, format: date-time }
-            updated_at: { type: string, format: date-time }
     DashboardMetrics:
       type: object
       properties:
@@ -536,6 +485,7 @@ components:
         avg_latency_ms: { type: number }
         p50_latency_ms: { type: number }
         p95_latency_ms: { type: number }
+        latency_sampled: { type: boolean, description: Whether latency statistics use a bounded sample. }
         p99_latency_ms: { type: number }
         usage_breakdown:
           type: array

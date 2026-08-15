@@ -40,7 +40,9 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusUnauthorized, "invalid_grant", "JWT bearer token is required")
 		return
 	}
-	if err := verifyJWT(strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer ")), app, r.Host, time.Now().UTC()); err != nil {
+	now := time.Now().UTC()
+	claims, err := verifyJWT(strings.TrimSpace(strings.TrimPrefix(authorization, "Bearer ")), app, r.Host, now)
+	if err != nil {
 		oauthError(w, http.StatusUnauthorized, "invalid_grant", err.Error())
 		return
 	}
@@ -52,12 +54,19 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_request", "duration_seconds must be between 60 and 86400")
 		return
 	}
+	if err := s.meta.ConsumeOAuthJTI(r.Context(), app.ClientID, claims.ID, claims.ExpiresAt.Time, now); err != nil {
+		if errors.Is(err, meta.ErrAlreadyUsed) {
+			oauthError(w, http.StatusUnauthorized, "invalid_grant", "JWT has already been used")
+			return
+		}
+		oauthError(w, http.StatusInternalServerError, "server_error", "could not record JWT usage")
+		return
+	}
 	accessToken, err := randomID("tr_oauth_", 32)
 	if err != nil {
 		oauthError(w, http.StatusInternalServerError, "server_error", "could not issue access token")
 		return
 	}
-	now := time.Now().UTC()
 	if err := s.meta.CreateOAuthAccessToken(r.Context(), meta.HashToken(accessToken), app.ProjectID, now.Add(time.Duration(duration)*time.Second), now); err != nil {
 		oauthError(w, http.StatusInternalServerError, "server_error", "could not persist access token")
 		return
@@ -141,10 +150,10 @@ func parseRSAPublicKey(raw string) (*rsa.PublicKey, error) {
 	return nil, errors.New("unsupported RSA public key")
 }
 
-func verifyJWT(raw string, app meta.OAuthApp, audience string, now time.Time) error {
+func verifyJWT(raw string, app meta.OAuthApp, audience string, now time.Time) (*jwt.RegisteredClaims, error) {
 	publicKey, err := parseRSAPublicKey(app.PublicKey)
 	if err != nil {
-		return errors.New("OAuth app public key is invalid")
+		return nil, errors.New("OAuth app public key is invalid")
 	}
 	claims := &jwt.RegisteredClaims{}
 	token, err := jwt.ParseWithClaims(raw, claims, func(token *jwt.Token) (any, error) {
@@ -157,12 +166,12 @@ func verifyJWT(raw string, app meta.OAuthApp, audience string, now time.Time) er
 		return publicKey, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}), jwt.WithIssuer(app.ClientID), jwt.WithAudience(audience), jwt.WithLeeway(60*time.Second), jwt.WithTimeFunc(func() time.Time { return now }))
 	if err != nil || !token.Valid {
-		return errors.New("JWT validation failed")
+		return nil, errors.New("JWT validation failed")
 	}
-	if claims.ID == "" {
-		return errors.New("JWT claim jti is invalid")
+	if claims.ID == "" || claims.ExpiresAt == nil {
+		return nil, errors.New("JWT claim jti is invalid")
 	}
-	return nil
+	return claims, nil
 }
 
 func oauthError(w http.ResponseWriter, status int, code, description string) {

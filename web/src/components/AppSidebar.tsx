@@ -48,7 +48,12 @@ export function AppSidebar({
       <div className="sidebar-brand">
         <img className="brand-mark" src="/tracy.svg" alt="Tracy" />
         <strong>Tracy</strong>
-        <button className="sidebar-collapse" aria-label={t("collapseSidebar")} onClick={onToggle}>
+        <button
+          className="sidebar-collapse"
+          aria-label={t("collapseSidebar")}
+          onClick={onToggle}
+          type="button"
+        >
           {collapsed ? "›" : "‹"}
         </button>
       </div>
@@ -67,6 +72,7 @@ export function AppSidebar({
                 className={`sidebar-nav-item ${activePage === item.page ? "active" : ""}`}
                 key={item.label}
                 onClick={() => onPageChange(item.page)}
+                type="button"
               >
                 <span className="sidebar-nav-icon">{item.icon}</span>
                 <span>{t(item.label)}</span>

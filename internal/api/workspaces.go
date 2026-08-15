@@ -47,12 +47,8 @@ func (s *Server) createUserWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	workspace := meta.Project{ID: id, Name: body.Name, CreatedAt: now, UpdatedAt: now}
-	if err := s.meta.CreateProject(r.Context(), workspace); err != nil {
+	if err := s.meta.CreateWorkspaceForUser(r.Context(), workspace, meta.WorkspaceMember{WorkspaceID: id, UserID: key.UserID, Role: "owner", CreatedAt: now}); err != nil {
 		errorJSON(w, http.StatusConflict, "workspace_exists", "could not create workspace")
-		return
-	}
-	if err := s.meta.AddWorkspaceMember(r.Context(), meta.WorkspaceMember{WorkspaceID: id, UserID: key.UserID, Role: "owner", CreatedAt: now}); err != nil {
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not add workspace owner")
 		return
 	}
 	if err := s.meta.SwitchSessionWorkspace(r.Context(), meta.HashToken(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), key.UserID, id); err != nil {

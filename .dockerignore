@@ -1,0 +1,11 @@
+.git
+.github
+bin
+data
+tmp
+web/node_modules
+web/dist
+internal/web/dist
+*.db
+*.db-shm
+*.db-wal

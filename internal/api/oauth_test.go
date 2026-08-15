@@ -93,6 +93,15 @@ func TestJWTOAuthTokenExchange(t *testing.T) {
 		t.Fatalf("issued token auth key=%+v err=%v", key, err)
 	}
 
+	replayReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8080/api/permission/oauth2/token", bytes.NewReader(body))
+	replayReq.Host = "127.0.0.1:8080"
+	replayReq.Header.Set("Authorization", "Bearer "+jwt)
+	replayRes := httptest.NewRecorder()
+	server.ServeHTTP(replayRes, replayReq)
+	if replayRes.Code != http.StatusUnauthorized {
+		t.Fatalf("replayed JWT status=%d body=%s", replayRes.Code, replayRes.Body.String())
+	}
+
 	claims["aud"] = "wrong-host"
 	badJWT := signTestJWT(t, privateKey, map[string]any{"alg": "RS256", "kid": "key-1", "typ": "JWT"}, claims)
 	req = httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8080/api/permission/oauth2/token", bytes.NewReader(body))

@@ -1,5 +1,9 @@
+# Reference only: Tracy reads these values from environment variables.
+# For example, set TRACY_ADDR, TRACY_QUEUE_BYTES and TRACY_TRUSTED_PROXIES.
 server:
   addr: ":8080"
+  # Set TRACY_TRUSTED_PROXIES to comma-separated IPs/CIDRs when behind a proxy.
+  trusted_proxies: ""
 
 metadata:
   sqlite:
@@ -12,3 +16,4 @@ trace:
     batch_size: 128
     flush_interval: "50ms"
     queue_size: 4096
+    queue_bytes: 536870912

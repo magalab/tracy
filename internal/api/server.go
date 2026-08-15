@@ -7,15 +7,19 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/panda/tracy/compat/cozeloop"
-	"github.com/panda/tracy/internal/annotation"
 	"github.com/panda/tracy/internal/ingest"
 	"github.com/panda/tracy/internal/storage/meta"
+	tracestore "github.com/panda/tracy/internal/storage/trace"
 	domain "github.com/panda/tracy/internal/trace"
 	"github.com/panda/tracy/internal/web"
 )
@@ -24,19 +28,93 @@ type Server struct {
 	meta   *meta.Store
 	writer *ingest.Writer
 	traces interface {
-		GetTrace(ctx context.Context, projectID, traceID string) ([]domain.Span, error)
+		GetTracePage(ctx context.Context, projectID, traceID, cursor string, limit int) (tracestore.TracePage, error)
 		ListTraces(ctx context.Context, query domain.Query) (domain.Page, error)
 		Metrics(ctx context.Context, query domain.MetricsQuery) (domain.Metrics, error)
 	}
-	logger *slog.Logger
+	logger           *slog.Logger
+	readyFlag        atomic.Bool
+	loginMu          sync.Mutex
+	loginAttempts    map[string]loginAttempt
+	loginLastCleanup time.Time
+	trustedProxies   []netip.Prefix
 }
 
+type loginAttempt struct {
+	window time.Time
+	count  int
+}
+
+func (s *Server) MarkReady() { s.readyFlag.Store(true) }
+
 func NewServer(m *meta.Store, w *ingest.Writer, t interface {
-	GetTrace(context.Context, string, string) ([]domain.Span, error)
+	GetTracePage(context.Context, string, string, string, int) (tracestore.TracePage, error)
 	ListTraces(context.Context, domain.Query) (domain.Page, error)
 	Metrics(context.Context, domain.MetricsQuery) (domain.Metrics, error)
-}, logger *slog.Logger) *Server {
-	return &Server{meta: m, writer: w, traces: t, logger: logger}
+}, logger *slog.Logger, trustedProxyConfig ...string) *Server {
+	s := &Server{meta: m, writer: w, traces: t, logger: logger, loginAttempts: make(map[string]loginAttempt)}
+	if len(trustedProxyConfig) > 0 {
+		for _, raw := range strings.Split(trustedProxyConfig[0], ",") {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				continue
+			}
+			if prefix, err := netip.ParsePrefix(raw); err == nil {
+				s.trustedProxies = append(s.trustedProxies, prefix)
+			} else if addr, err := netip.ParseAddr(raw); err == nil {
+				s.trustedProxies = append(s.trustedProxies, netip.PrefixFrom(addr, addr.BitLen()))
+			}
+		}
+	}
+	return s
+}
+
+func (s *Server) loginClientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	remote, err := netip.ParseAddr(host)
+	if err == nil {
+		for _, proxy := range s.trustedProxies {
+			if proxy.Contains(remote) {
+				for _, forwarded := range strings.Split(r.Header.Get("X-Forwarded-For"), ",") {
+					if candidate, parseErr := netip.ParseAddr(strings.TrimSpace(forwarded)); parseErr == nil {
+						return candidate.String()
+					}
+				}
+				break
+			}
+		}
+	}
+	return host
+}
+
+func (s *Server) allowLogin(clientIP string) bool {
+	now := time.Now()
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	if s.loginLastCleanup.IsZero() || now.Sub(s.loginLastCleanup) >= time.Minute {
+		for key, item := range s.loginAttempts {
+			if now.Sub(item.window) >= time.Minute {
+				delete(s.loginAttempts, key)
+			}
+		}
+		s.loginLastCleanup = now
+	}
+	attempt := s.loginAttempts[clientIP]
+	if attempt.window.IsZero() || now.Sub(attempt.window) >= time.Minute {
+		attempt = loginAttempt{window: now}
+	}
+	attempt.count++
+	s.loginAttempts[clientIP] = attempt
+	return attempt.count <= 10
+}
+
+func (s *Server) resetLogin(clientIP string) {
+	s.loginMu.Lock()
+	delete(s.loginAttempts, clientIP)
+	s.loginMu.Unlock()
 }
 
 func (s *Server) Routes() http.Handler {
@@ -44,6 +122,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.ready)
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
+	mux.HandleFunc("POST /api/v1/auth/logout", s.logout)
 	mux.HandleFunc("GET /api/v1/auth/me", s.currentUser)
 	mux.HandleFunc("GET /api/v1/workspaces", s.listUserWorkspaces)
 	mux.HandleFunc("POST /api/v1/workspaces", s.createUserWorkspace)
@@ -54,9 +133,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/traces/", s.getTrace)
 	mux.HandleFunc("GET /api/v1/traces", s.listTraces)
 	mux.HandleFunc("GET /api/v1/dashboard", s.dashboard)
-	mux.HandleFunc("GET /api/v1/traces/{traceID}/annotations", s.listAnnotations)
-	mux.HandleFunc("POST /api/v1/traces/{traceID}/annotations", s.createAnnotation)
-	mux.HandleFunc("DELETE /api/v1/annotations/{annotationID}", s.deleteAnnotation)
 	mux.HandleFunc("GET /api/v1/ingest/stats", s.ingestStats)
 	mux.HandleFunc("GET /api/v1/projects", s.listProjects)
 	mux.HandleFunc("POST /api/v1/projects", s.createProject)
@@ -65,13 +141,30 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/keys/{keyID}/revoke", s.revokeKey)
 	mux.HandleFunc("GET /api/v1/oauth/apps", s.listOAuthApps)
 	mux.HandleFunc("POST /api/v1/oauth/apps", s.createOAuthApp)
+	mux.Handle("/api/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		errorJSON(w, http.StatusNotFound, "not_found", "API endpoint was not found")
+	}))
+	mux.Handle("/api", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		errorJSON(w, http.StatusNotFound, "not_found", "API endpoint was not found")
+	}))
+	mux.Handle("/v1/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		errorJSON(w, http.StatusNotFound, "not_found", "API endpoint was not found")
+	}))
+	mux.Handle("/v1", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		errorJSON(w, http.StatusNotFound, "not_found", "API endpoint was not found")
+	}))
 	mux.Handle("/", web.Handler())
 	return logging(mux, s.logger)
 }
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
 func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
+	if !s.readyFlag.Load() {
+		errorJSON(w, http.StatusServiceUnavailable, "not_ready", "server is still starting")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
@@ -157,103 +250,6 @@ func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.writer.Metrics())
 }
 
-func (s *Server) listAnnotations(w http.ResponseWriter, r *http.Request) {
-	key, traceID, ok := s.annotationContext(w, r)
-	if !ok {
-		return
-	}
-	items, err := s.meta.ListAnnotations(r.Context(), key.ProjectID, traceID)
-	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list annotations")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
-}
-
-func (s *Server) createAnnotation(w http.ResponseWriter, r *http.Request) {
-	key, traceID, ok := s.annotationContext(w, r)
-	if !ok {
-		return
-	}
-	var body struct {
-		SpanID  string   `json:"span_id"`
-		Key     string   `json:"key"`
-		Score   *float64 `json:"score"`
-		Label   string   `json:"label"`
-		Comment string   `json:"comment"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 128<<10)).Decode(&body); err != nil {
-		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
-		return
-	}
-	body.Key = strings.TrimSpace(body.Key)
-	body.Label = strings.TrimSpace(body.Label)
-	if body.Key == "" || len(body.Key) > 128 {
-		errorJSON(w, http.StatusBadRequest, "invalid_annotation", "key is required and must be at most 128 bytes")
-		return
-	}
-	if len(body.SpanID) > 256 || len(body.Label) > 128 || len(body.Comment) > 64<<10 {
-		errorJSON(w, http.StatusRequestEntityTooLarge, "payload_too_large", "annotation fields exceed configured limits")
-		return
-	}
-	if body.Score != nil && (*body.Score < 0 || *body.Score > 1) {
-		errorJSON(w, http.StatusBadRequest, "invalid_score", "score must be between 0 and 1")
-		return
-	}
-	id, err := randomID("ann_", 12)
-	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "id_generation_failed", "could not generate annotation id")
-		return
-	}
-	now := time.Now().UTC()
-	item := annotation.Annotation{ID: id, ProjectID: key.ProjectID, TraceID: traceID, SpanID: body.SpanID, Key: body.Key, Score: body.Score, Label: body.Label, Comment: body.Comment, CreatedBy: key.ID, CreatedAt: now, UpdatedAt: now}
-	if err := s.meta.CreateAnnotation(r.Context(), item); err != nil {
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not save annotation")
-		return
-	}
-	writeJSON(w, http.StatusCreated, item)
-}
-
-func (s *Server) deleteAnnotation(w http.ResponseWriter, r *http.Request) {
-	key, err := s.authenticate(r)
-	if err != nil {
-		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
-		return
-	}
-	if err := s.meta.DeleteAnnotation(r.Context(), key.ProjectID, r.PathValue("annotationID")); err != nil {
-		if errors.Is(err, meta.ErrNotFound) {
-			errorJSON(w, http.StatusNotFound, "annotation_not_found", "annotation was not found")
-			return
-		}
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not delete annotation")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
-}
-
-func (s *Server) annotationContext(w http.ResponseWriter, r *http.Request) (meta.APIKey, string, bool) {
-	key, err := s.authenticate(r)
-	if err != nil {
-		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
-		return meta.APIKey{}, "", false
-	}
-	traceID := r.PathValue("traceID")
-	if traceID == "" {
-		errorJSON(w, http.StatusBadRequest, "invalid_trace_id", "trace id is required")
-		return meta.APIKey{}, "", false
-	}
-	spans, err := s.traces.GetTrace(r.Context(), key.ProjectID, traceID)
-	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not read trace")
-		return meta.APIKey{}, "", false
-	}
-	if len(spans) == 0 {
-		errorJSON(w, http.StatusNotFound, "trace_not_found", "trace was not found")
-		return meta.APIKey{}, "", false
-	}
-	return key, traceID, true
-}
-
 func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return
@@ -289,17 +285,13 @@ func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	project := meta.Project{ID: projectID, Name: strings.TrimSpace(body.Name), CreatedAt: now, UpdatedAt: now}
-	if err := s.meta.CreateProject(r.Context(), project); err != nil {
-		errorJSON(w, http.StatusConflict, "project_exists", "could not create project")
-		return
-	}
 	key, token, err := s.newKey(projectID, body.KeyName, "project")
 	if err != nil {
 		errorJSON(w, http.StatusInternalServerError, "key_generation_failed", "could not create API key")
 		return
 	}
-	if err := s.meta.CreateAPIKey(r.Context(), key); err != nil {
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not save API key")
+	if err := s.meta.CreateProjectWithAPIKey(r.Context(), project, key); err != nil {
+		errorJSON(w, http.StatusConflict, "project_exists", "could not create project")
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"project": project, "api_key": keyView{ID: key.ID, ProjectID: key.ProjectID, Name: key.Name, Role: key.Role, Token: token}})
@@ -354,6 +346,10 @@ func (s *Server) createProjectKey(w http.ResponseWriter, r *http.Request) {
 			errorJSON(w, http.StatusBadRequest, "invalid_expires_at", "expires_at must be RFC3339")
 			return
 		}
+		if !expires.After(time.Now().UTC()) {
+			errorJSON(w, http.StatusBadRequest, "invalid_expires_at", "expires_at must be in the future")
+			return
+		}
 		key.ExpiresAt = &expires
 	}
 	if err := s.meta.CreateAPIKey(r.Context(), key); err != nil {
@@ -402,8 +398,12 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 func (s *Server) newKey(projectID, name, role string) (meta.APIKey, string, error) {
-	if strings.TrimSpace(name) == "" {
+	name = strings.TrimSpace(name)
+	if name == "" {
 		name = "API Key"
+	}
+	if len(name) > 128 {
+		return meta.APIKey{}, "", errors.New("key name must be at most 128 bytes")
 	}
 	id, err := randomID("key_", 12)
 	if err != nil {
@@ -434,17 +434,31 @@ func (s *Server) getTrace(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusBadRequest, "invalid_trace_id", "trace id is required")
 		return
 	}
-	spans, err := s.traces.GetTrace(r.Context(), key.ProjectID, traceID)
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, parseErr := strconv.Atoi(raw)
+		if parseErr != nil || parsed < 1 || parsed > 1000 {
+			errorJSON(w, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and 1000")
+			return
+		}
+		limit = parsed
+	}
+	page, err := s.traces.GetTracePage(r.Context(), key.ProjectID, traceID, r.URL.Query().Get("cursor"), limit)
 	if err != nil {
 		s.logger.Error("get trace", "error", err)
 		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not read trace")
 		return
 	}
-	if len(spans) == 0 {
+	if len(page.Spans) == 0 {
 		errorJSON(w, http.StatusNotFound, "trace_not_found", "trace was not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"trace_id": traceID, "spans": spans})
+	response := struct {
+		TraceID    string        `json:"trace_id"`
+		Spans      []domain.Span `json:"spans"`
+		NextCursor string        `json:"next_cursor,omitempty"`
+	}{TraceID: traceID, Spans: page.Spans, NextCursor: page.NextCursor}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) listTraces(w http.ResponseWriter, r *http.Request) {
@@ -548,7 +562,22 @@ func writeValidationError(w http.ResponseWriter, err error) {
 func logging(next http.Handler, logger *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		logger.Info("http request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		logger.Info("http request", "method", r.Method, "path", r.URL.Path, "status", recorder.status, "remote_addr", r.RemoteAddr, "duration", time.Since(start))
 	})
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *statusRecorder) Write(body []byte) (int, error) {
+	return r.ResponseWriter.Write(body)
 }

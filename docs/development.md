@@ -4,7 +4,7 @@
 
 `internal/storage/meta` 负责 Workspace（当前数据库仍沿用 `projects` 表名）、User、Workspace Member、Session 和 API Key；`internal/storage/trace` 只负责 Span。HTTP DTO 通过 `internal/trace` domain model 进入存储，CozeLoop 兼容代码应放在 `compat/cozeloop`。
 
-服务使用两个独立 SQLite 文件：`meta.db` 和 `traces.db`。两者不做跨库事务，Project 权限由 API 层和 Service 层保证。
+服务使用两个独立 SQLite 文件：`meta.db` 和 `traces.db`。两者不做跨库事务，Project 权限由 API 层和 Service 层保证。Trace writer 同时受队列条数和 `TRACY_QUEUE_BYTES` 在途字节预算限制，默认预算为 512 MiB。反向代理部署时，仅将受信任代理的 IP/CIDR 配置到 `TRACY_TRUSTED_PROXIES`，登录限流才会读取 `X-Forwarded-For`。
 
 ## Ingest 语义
 
@@ -20,19 +20,17 @@ Dashboard 使用 `GET /api/v1/dashboard`，默认聚合最近 24 小时，也支
 
 Default API Key 是兼容用的 admin key，可以创建 Workspace 和 workspace-scoped API Key。新 Key 的明文 token 只在创建响应中返回一次；数据库只存 token hash。撤销通过 `POST /api/v1/keys/{keyID}/revoke` 完成。
 
-Web 用户通过 `POST /api/v1/auth/login` 登录，服务创建 24 小时的有状态 User Session；当前 Session 绑定一个 Workspace。`GET /api/v1/auth/me` 返回当前用户和 Workspace。SDK、CozeLoop ingest 和其他机器调用继续使用 Workspace API Key / PAT；两者不能混淆。首次启动会创建 `TRACY_ADMIN_EMAIL` / `TRACY_ADMIN_PASSWORD` 对应的 owner 用户；未配置密码时生成随机密码并写入启动日志。
+Web 用户通过 `POST /api/v1/auth/login` 登录，服务创建 24 小时的有状态 User Session；当前 Session 绑定一个 Workspace。`POST /api/v1/auth/logout` 会在服务端撤销当前 Session，`GET /api/v1/auth/me` 返回当前用户和 Workspace。SDK、CozeLoop ingest 和其他机器调用继续使用 Workspace API Key / PAT；两者不能混淆。首次启动会创建 `TRACY_ADMIN_EMAIL` / `TRACY_ADMIN_PASSWORD` 对应的 owner 用户；未配置密码时生成随机密码并写入启动日志。
 
 Web 登录后可以通过 `GET /api/v1/workspaces` 查看成员可访问的 Workspace，使用 `POST /api/v1/workspaces` 创建 Workspace，使用 `POST /api/v1/workspaces/{workspaceID}/switch` 切换当前 Session。未登录的 Web 页面不会读取旧 API Key，也不会请求 Trace 数据。
 
 JWT OAuth Compatibility 使用 metadata DB 的 `oauth_apps` 和 `oauth_access_tokens` 表。Admin 通过 `/api/v1/oauth/apps` 注册 `client_id`、Workspace、`public_key_id` 和 RSA PEM 公钥；`/api/permission/oauth2/token` 使用 `golang-jwt/jwt` 校验 Bearer JWT 的 RS256 签名及 `iss`、`aud`、`kid`、`iat`、`exp`、`jti` 后签发短期 workspace-scoped access token。JWT audience 必须等于客户端请求的 API host，access token 继续复用现有 `Authorization: Bearer` 认证链路。
 
-Annotation 存在 metadata DB 中，但所有查询都带当前 API Key 的 ProjectID。Annotation 的 `key` 必填，score 范围为 0 到 1；Trace Explorer 会在详情页加载、创建和删除 Annotation。
-
 ## Web 开发
 
 HTTP contract 的机器可读描述位于 [`docs/openapi.yaml`](openapi.yaml)。新增 endpoint 时同步更新该文件，并保持错误响应和 Project 隔离语义与 contract tests 一致。
 
-前端源码位于 `web/`，构建产物输出到 `internal/web/dist/`，由 Go `embed.FS` 编入 binary。开发前端时可运行：
+前端源码位于 `web/`，构建产物输出到被 Git 忽略的 `internal/web/dist/`，由 Go `embed.FS` 编入 binary。构建 Go binary 前必须先运行 `make build-web`；`make build` 已包含该步骤。不要为该目录添加 `.gitkeep`，因为它不能替代真实的前端入口文件。开发前端时可运行：
 
 ```bash
 cd web
@@ -41,6 +39,27 @@ npm run dev
 ```
 
 Vite 会把 `/api` 请求代理到本地 Go 服务。发布前运行 `make build`。
+
+## Docker
+
+Docker 使用多阶段构建：Node.js 阶段构建 `web/`，Go 阶段编译单 binary，最终镜像只包含 binary、CA 证书和 `/data` 数据目录。前端构建产物不提交到 Git，由 Docker build 在镜像构建过程中生成。
+
+本地构建和运行：
+
+```bash
+make docker-build
+docker run --rm -p 8080:8080 \
+  -v "$(pwd)/data:/data" \
+  tracy:local
+```
+
+GitHub Actions 会在 push 和 pull request 中运行 Go 测试、静态检查、前端检查、Go binary 构建和 Docker 镜像构建。
+
+推送形如 `v1.2.3` 的 Git tag 后，Release workflow 会生成 `linux/amd64`、`linux/arm64` 和 `darwin/arm64` 二进制压缩包，并将 `linux/amd64` 与 `linux/arm64` 多架构镜像推送到 `ghcr.io/<owner>/<repository>`。仓库需要允许 GitHub Actions 使用 `packages: write` 权限。
+
+## OpenAPI
+
+`docs/openapi.yaml` 是 HTTP contract 的显式源文件，不从 handler 注解自动生成。当前服务使用标准库 `net/http` 的路由和独立 HTTP DTO；强行引入注解生成器会增加路由、模型和响应定义的第二套来源，且无法替代现有黑盒 contract tests。修改 endpoint 时应同步更新 OpenAPI 文件和 contract tests。
 
 前端工程化检查使用 Oxlint 和 Oxfmt：
 

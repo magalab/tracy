@@ -1,14 +1,20 @@
-import { StrictMode, useEffect, useState } from "react";
+import { lazy, StrictMode, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { AnnotationDraft } from "./components/AnnotationPanel";
+import Button from "@douyinfe/semi-ui/lib/es/button";
+import "@douyinfe/semi-ui/lib/es/_base/base.css";
 import { AppSidebar } from "./components/AppSidebar";
 import { LoginPage } from "./components/LoginPage";
-import { MetricsOverview } from "./components/MetricsOverview";
-import { TraceDetail } from "./components/TraceDetail";
+const MetricsOverview = lazy(() =>
+  import("./components/MetricsOverview").then((module) => ({ default: module.MetricsOverview })),
+);
+const TraceDetail = lazy(() =>
+  import("./components/TraceDetail").then((module) => ({ default: module.TraceDetail })),
+);
 import { TraceList } from "./components/TraceList";
 import { WorkspacePicker } from "./components/WorkspacePicker";
 import {
   getCurrentUser,
+  logout as logoutRequest,
   listWorkspaces,
   login as loginRequest,
   createWorkspace,
@@ -38,6 +44,7 @@ function App() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeWorkspaceID, setActiveWorkspaceID] = useState("");
   const [workspacesReady, setWorkspacesReady] = useState(false);
+  const [workspaceError, setWorkspaceError] = useState("");
   const [filter, setFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [kindFilter, setKindFilter] = useState("");
@@ -45,18 +52,13 @@ function App() {
   const [endDate, setEndDate] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activePage, setActivePage] = useState<"overview" | "traces">("traces");
-  const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft>({
-    key: "quality",
-    score: "1",
-    label: "",
-    comment: "",
-  });
   const explorer = useTraceExplorer(
     token,
+    activeWorkspaceID,
     statusFilter,
     kindFilter,
-    startDate ? new Date(`${startDate}T00:00:00`).toISOString() : "",
-    endDate ? new Date(`${endDate}T23:59:59.999`).toISOString() : "",
+    startDate ? new Date(startDate.replace(" ", "T")).toISOString() : "",
+    endDate ? new Date(endDate.replace(" ", "T")).toISOString() : "",
   );
 
   useEffect(() => {
@@ -82,10 +84,14 @@ function App() {
   useEffect(() => {
     if (!user || !token) return;
     setWorkspacesReady(false);
+    setWorkspaceError("");
     void listWorkspaces(token)
       .then((data) => {
         setWorkspaces(data.items);
         setActiveWorkspaceID(data.active_id);
+      })
+      .catch((err) => {
+        setWorkspaceError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => setWorkspacesReady(true));
   }, [token, user]);
@@ -100,6 +106,7 @@ function App() {
   }
 
   function logout() {
+    if (token) void logoutRequest(token).catch(() => undefined);
     localStorage.removeItem(sessionKey);
     localStorage.removeItem(userKey);
     setToken("");
@@ -116,9 +123,8 @@ function App() {
 
   async function selectWorkspace(id: string) {
     await switchWorkspace(token, id);
+    explorer.clearSelection();
     setActiveWorkspaceID(id);
-    void explorer.loadPage();
-    void explorer.loadMetrics();
   }
 
   function clearFilters() {
@@ -127,16 +133,6 @@ function App() {
     setKindFilter("");
     setStartDate("");
     setEndDate("");
-  }
-
-  function addAnnotation() {
-    void explorer.addAnnotation({
-      key: annotationDraft.key,
-      score: Number(annotationDraft.score),
-      label: annotationDraft.label,
-      comment: annotationDraft.comment,
-    });
-    setAnnotationDraft((draft) => ({ ...draft, label: "", comment: "" }));
   }
 
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceID);
@@ -149,6 +145,7 @@ function App() {
       <WorkspacePicker
         workspaces={workspaces}
         activeID={activeWorkspaceID}
+        error={workspaceError}
         onSelect={selectWorkspace}
         onCreate={createUserWorkspace}
       />
@@ -176,72 +173,92 @@ function App() {
         <header className="topbar">
           <div className="trace-context">
             <span className="eyebrow">{t(activePage === "overview" ? "overview" : "trace")}</span>
-            <h1>{t(activePage === "overview" ? "traceHealth" : "traceExplorer")}</h1>
+            <strong className="topbar-workspace">{activeWorkspace.name}</strong>
           </div>
           <div className="topbar-actions">
             <div className="preference-actions">
-              <button className="preference-button" onClick={toggleLanguage}>
-                {language === "en" ? "中" : "EN"}
-              </button>
-              <button
+              <Button
                 className="preference-button"
+                theme="borderless"
+                type="tertiary"
+                onClick={toggleLanguage}
+              >
+                {language === "en" ? "中" : "EN"}
+              </Button>
+              <Button
+                className="preference-button"
+                theme="borderless"
+                type="tertiary"
                 onClick={toggleTheme}
                 aria-label={theme === "dark" ? t("theme") : t("darkTheme")}
                 title={theme === "dark" ? t("theme") : t("darkTheme")}
               >
                 {theme === "dark" ? "☼" : "☾"}
-              </button>
+              </Button>
             </div>
           </div>
         </header>
         <main className="main-content">
-          {activePage === "overview" ? (
-            <section className="overview-page">
-              <div className="overview-page-heading">
-                <span className="eyebrow">{t("operations")}</span>
-                <h2>{t("traceHealth")}</h2>
-                <p>{t("inspectHealth")}</p>
+          <Suspense fallback={<div className="page-loading">{t("loading")}</div>}>
+            {activePage === "overview" ? (
+              <section className="overview-page">
+                <div className="overview-page-heading">
+                  <span className="eyebrow">{t("operations")}</span>
+                  <h2>{t("traceHealth")}</h2>
+                  <p>{t("inspectHealth")}</p>
+                </div>
+                {explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
+              </section>
+            ) : (
+              <div className="trace-explorer-shell">
+                <TraceList
+                  traces={explorer.page.items}
+                  selectedID={explorer.selectedID}
+                  filter={filter}
+                  statusFilter={statusFilter}
+                  kindFilter={kindFilter}
+                  startDate={startDate}
+                  endDate={endDate}
+                  loading={explorer.loading}
+                  token={token}
+                  error={explorer.error}
+                  cursor={explorer.cursor}
+                  onFilterChange={setFilter}
+                  onStatusChange={setStatusFilter}
+                  onKindChange={setKindFilter}
+                  onStartDateChange={setStartDate}
+                  onEndDateChange={setEndDate}
+                  onOpen={(id) => void explorer.openTrace(id)}
+                  onRefresh={() => {
+                    void explorer.loadPage();
+                    void explorer.loadMetrics();
+                  }}
+                  onLoadMore={(nextCursor) => void explorer.loadPage(nextCursor)}
+                  onClearFilters={clearFilters}
+                />
+                {explorer.selectedID && (
+                  <>
+                    <button
+                      aria-label={t("backToTraces")}
+                      className="trace-detail-backdrop"
+                      onClick={explorer.clearSelection}
+                      type="button"
+                    />
+                    <div className="trace-detail-drawer">
+                      <TraceDetail
+                        selectedID={explorer.selectedID}
+                        selected={explorer.selected}
+                        hasMore={Boolean(explorer.selectedNextCursor)}
+                        loadingMore={explorer.traceLoading}
+                        onLoadMore={() => void explorer.loadMoreTrace()}
+                        onBack={explorer.clearSelection}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
-              {explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
-            </section>
-          ) : explorer.selectedID ? (
-            <TraceDetail
-              selectedID={explorer.selectedID}
-              selected={explorer.selected}
-              annotations={explorer.annotations}
-              draft={annotationDraft}
-              onDraftChange={setAnnotationDraft}
-              onAddAnnotation={addAnnotation}
-              onDeleteAnnotation={(id) => void explorer.removeAnnotation(id)}
-              onBack={explorer.clearSelection}
-            />
-          ) : (
-            <TraceList
-              traces={explorer.page.items}
-              selectedID={explorer.selectedID}
-              filter={filter}
-              statusFilter={statusFilter}
-              kindFilter={kindFilter}
-              startDate={startDate}
-              endDate={endDate}
-              loading={explorer.loading}
-              token={token}
-              error={explorer.error}
-              cursor={explorer.cursor}
-              onFilterChange={setFilter}
-              onStatusChange={setStatusFilter}
-              onKindChange={setKindFilter}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
-              onOpen={(id) => void explorer.openTrace(id)}
-              onRefresh={() => {
-                void explorer.loadPage();
-                void explorer.loadMetrics();
-              }}
-              onLoadMore={(nextCursor) => void explorer.loadPage(nextCursor)}
-              onClearFilters={clearFilters}
-            />
-          )}
+            )}
+          </Suspense>
         </main>
         <footer>
           <span>{t("localMode")}</span>

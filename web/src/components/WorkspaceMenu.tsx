@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { usePreferences } from "../i18n";
 import type { Workspace } from "../types";
-import { Button, Input, Popover } from "@douyinfe/semi-ui";
+import Button from "@douyinfe/semi-ui/lib/es/button";
+import Input from "@douyinfe/semi-ui/lib/es/input";
+import Popover from "@douyinfe/semi-ui/lib/es/popover";
 
 type WorkspaceMenuProps = {
   workspaces: Workspace[];
@@ -37,6 +39,7 @@ export function WorkspaceMenu({ workspaces, activeID, onSelect, onCreate }: Work
           <button
             className={`workspace-menu-option ${workspace.id === activeID ? "active" : ""}`}
             key={workspace.id}
+            type="button"
             onClick={() => {
               void onSelect(workspace.id);
               setOpen(false);
@@ -77,7 +80,7 @@ export function WorkspaceMenu({ workspaces, activeID, onSelect, onCreate }: Work
         visible={open}
         onVisibleChange={setOpen}
       >
-        <button className="workspace-menu-trigger">
+        <button className="workspace-menu-trigger" type="button" aria-expanded={open}>
           <span className="workspace-menu-icon">
             {active?.name.slice(0, 1).toUpperCase() ?? "W"}
           </span>

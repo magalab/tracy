@@ -1,6 +1,14 @@
 import type { TraceSummary } from "../types";
 import { usePreferences } from "../i18n";
-import { Button, DatePicker, Empty, Select, Spin, Table } from "@douyinfe/semi-ui";
+import Button from "@douyinfe/semi-ui/lib/es/button";
+import DatePicker from "@douyinfe/semi-ui/lib/es/datePicker";
+import Empty from "@douyinfe/semi-ui/lib/es/empty";
+import Input from "@douyinfe/semi-ui/lib/es/input";
+import Select from "@douyinfe/semi-ui/lib/es/select";
+import Spin from "@douyinfe/semi-ui/lib/es/spin";
+import Table from "@douyinfe/semi-ui/lib/es/table";
+import IconRefresh from "@douyinfe/semi-icons/lib/es/icons/IconRefresh";
+import IconSearch from "@douyinfe/semi-icons/lib/es/icons/IconSearch";
 
 type TraceListProps = {
   traces: TraceSummary[];
@@ -25,14 +33,17 @@ type TraceListProps = {
   onClearFilters: () => void;
 };
 
-function toDateString(value: unknown) {
+function toDateTimeString(value: unknown) {
   if (value instanceof Date) {
     const year = value.getFullYear();
     const month = String(value.getMonth() + 1).padStart(2, "0");
     const day = String(value.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
+    const hours = String(value.getHours()).padStart(2, "0");
+    const minutes = String(value.getMinutes()).padStart(2, "0");
+    const seconds = String(value.getSeconds()).padStart(2, "0");
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   }
-  return typeof value === "string" ? value.slice(0, 10) : "";
+  return typeof value === "string" ? value : "";
 }
 
 export function TraceList({
@@ -108,29 +119,43 @@ export function TraceList({
     <section className="list-panel">
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">{t("projectDefault")}</span>
           <h2>{t("recentTraces")}</h2>
         </div>
         <Button
+          aria-label={t("refresh")}
           className="ghost"
+          icon={<IconRefresh />}
           theme="borderless"
+          title={t("refresh")}
           type="tertiary"
           onClick={onRefresh}
           disabled={loading}
-        >
-          {t("refresh")}
-        </Button>
+        />
       </div>
       <div className="toolbar">
-        <div className="search-field">
-          <span>⌕</span>
-          <input
-            aria-label={t("filterByTraceID")}
-            value={filter}
-            onChange={(event) => onFilterChange(event.target.value)}
-            placeholder={t("searchTraceID")}
-          />
-        </div>
+        <Input
+          aria-label={t("filterByTraceID")}
+          className="trace-filter-search"
+          prefix={<IconSearch />}
+          value={filter}
+          onChange={onFilterChange}
+          placeholder={t("searchTraceID")}
+        />
+        <DatePicker
+          aria-label={t("startDate")}
+          className="trace-filter-date"
+          format="yyyy-MM-dd HH:mm:ss"
+          type="dateTimeRange"
+          timePickerOpts={{ format: "HH:mm:ss" }}
+          placeholder={[t("startDate"), t("endDate")]}
+          rangeSeparator="→"
+          value={startDate || endDate ? [startDate, endDate] : undefined}
+          onChange={(value) => {
+            const values = Array.isArray(value) ? value : [];
+            onStartDateChange(toDateTimeString(values[0]));
+            onEndDateChange(toDateTimeString(values[1]));
+          }}
+        />
         <Select
           aria-label={t("allStatus")}
           className="trace-filter-select"
@@ -142,22 +167,6 @@ export function TraceList({
           <Select.Option value="ok">{t("healthyStatus")}</Select.Option>
           <Select.Option value="error">{t("errors")}</Select.Option>
         </Select>
-        <DatePicker
-          aria-label={t("startDate")}
-          className="trace-filter-date"
-          format="yyyy-MM-dd"
-          placeholder={t("startDate")}
-          value={startDate || undefined}
-          onChange={(value) => onStartDateChange(toDateString(value))}
-        />
-        <DatePicker
-          aria-label={t("endDate")}
-          className="trace-filter-date"
-          format="yyyy-MM-dd"
-          placeholder={t("endDate")}
-          value={endDate || undefined}
-          onChange={(value) => onEndDateChange(toDateString(value))}
-        />
         <Select
           aria-label={t("allKinds")}
           className="trace-filter-select"
@@ -177,7 +186,12 @@ export function TraceList({
         </span>
         <span>{statusFilter || kindFilter ? t("filteredResults") : t("newestFirst")}</span>
       </div>
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error" role="alert">
+          <span className="error-icon">!</span>
+          <span>{error === "Failed to fetch" ? t("serviceUnavailable") : error}</span>
+        </div>
+      )}
       {!token && (
         <div className="empty">
           <strong>{t("connectProject")}</strong>
@@ -210,7 +224,14 @@ export function TraceList({
             trace
               ? {
                   className: selectedID === trace.trace_id ? "active" : "",
+                  tabIndex: 0,
                   onClick: () => onOpen(trace.trace_id),
+                  onKeyDown: (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onOpen(trace.trace_id);
+                    }
+                  },
                 }
               : {}
           }

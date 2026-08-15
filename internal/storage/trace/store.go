@@ -3,15 +3,20 @@ package trace
 import (
 	"context"
 	"errors"
-
 	domain "github.com/panda/tracy/internal/trace"
 )
 
-var ErrNotFound = errors.New("trace not found")
+var ErrTooLarge = errors.New("trace exceeds response limits")
+
+type TracePage struct {
+	Spans      []domain.Span
+	NextCursor string
+}
 
 type Store interface {
 	Append(ctx context.Context, spans []domain.Span) error
 	GetTrace(ctx context.Context, projectID, traceID string) ([]domain.Span, error)
+	GetTracePage(ctx context.Context, projectID, traceID, cursor string, limit int) (TracePage, error)
 	ListTraces(ctx context.Context, query domain.Query) (domain.Page, error)
 	Metrics(ctx context.Context, query domain.MetricsQuery) (domain.Metrics, error)
 }

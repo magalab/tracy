@@ -16,6 +16,24 @@ go run ./cmd/server
 make build
 ```
 
+### Docker
+
+Build the image:
+
+```bash
+make docker-build
+```
+
+Run the container with SQLite files persisted under `./data`:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -v "$(pwd)/data:/data" \
+  tracy:local
+```
+
+Release builds are produced from version tags and include `linux/amd64`, `linux/arm64`, and `darwin/arm64` archives. The same release workflow publishes a `linux/amd64` and `linux/arm64` image to `ghcr.io/<owner>/<repository>`.
+
 首次启动会创建 `data/meta.db` 和 `data/traces.db`，并将初始 API Key 只输出到启动日志。也可以预先设置 `TRACY_API_KEY`：
 
 ```bash
@@ -68,6 +86,7 @@ curl -X POST http://localhost:8080/api/v1/oauth/apps \
 - `GET /healthz` 和 `GET /readyz` 返回 200。
 - `POST /api/v1/ingest` 接受 `{ "spans": [...] }`，成功返回 `202`，表示数据已进入内存队列。
 - `POST /v1/loop/traces/ingest` 接受官方 CozeLoop Go SDK 的 `{ "spans": [...] }` payload，成功返回 `{"code":0,"msg":""}`。
+- `POST /api/v1/auth/logout` 撤销当前 Web Session；API 未匹配路径返回 JSON 404/405，不会回退到 SPA。
 - `GET /api/v1/traces` 返回当前 Project 的 Trace 列表；`GET /api/v1/traces/{trace_id}` 返回单个 Trace。
 - `GET /api/v1/dashboard` 返回当前 Project 的请求量、错误率、Token 汇总、延迟分位数和按 span kind 的用量分布。
 - `POST /api/permission/oauth2/token` 支持 CozeLoop JWT bearer grant；Admin API Key 可通过 `POST/GET /api/v1/oauth/apps` 管理 OAuth App。
@@ -75,13 +94,12 @@ curl -X POST http://localhost:8080/api/v1/oauth/apps \
 - Admin API Key 可调用 `GET /api/v1/projects`、`POST /api/v1/projects`、项目 Key 列表/创建和 `POST /api/v1/keys/{id}/revoke`。
 - Admin API Key 调用 `GET /api/v1/ingest/stats` 可查看 accepted、written、dropped、queue depth 和 write errors。
 - 单个 input/output 最大 1 MiB，attributes 最大 256 KiB / 128 项；超限返回 `413 payload_too_large`。
-- `POST/GET /api/v1/traces/{trace_id}/annotations` 管理当前 Project 的反馈，`DELETE /api/v1/annotations/{id}` 删除反馈。
 - 错误格式固定为 `{ "error": { "code": "...", "message": "..." } }`。
 - API 使用 `Authorization: Bearer <token>`；Key 只绑定一个 Project。
 
 ## 配置
 
-完整示例见 [`config.example.yaml`](config.example.yaml)。当前配置通过环境变量读取：`TRACY_ADDR`、`TRACY_META_DB`、`TRACY_TRACE_DB`、`TRACY_BATCH_SIZE`、`TRACY_FLUSH_INTERVAL`、`TRACY_QUEUE_SIZE`。
+完整示例见 [`config.example.yaml`](config.example.yaml)。当前配置通过环境变量读取：`TRACY_ADDR`、`TRACY_META_DB`、`TRACY_TRACE_DB`、`TRACY_BATCH_SIZE`、`TRACY_FLUSH_INTERVAL`、`TRACY_QUEUE_SIZE`、`TRACY_QUEUE_BYTES`。如果服务位于反向代理后，可通过 `TRACY_TRUSTED_PROXIES` 配置可信代理 IP/CIDR，登录限流才会使用代理转发的客户端 IP；不要把该配置指向不受信任的网络。
 
 ## 开发
 
@@ -90,6 +108,6 @@ go test ./...
 go vet ./...
 ```
 
-架构和后续阶段见 [`tmp/plan.md`](tmp/plan.md)，协议边界和本地开发约定见 [`docs/development.md`](docs/development.md)。CozeLoop 兼容协议说明见 [`docs/cozeloop-compat.md`](docs/cozeloop-compat.md)。
+协议边界和本地开发约定见 [`docs/development.md`](docs/development.md)，项目开发规则见 [`AGENTS.md`](AGENTS.md)。CozeLoop 兼容协议说明见 [`docs/cozeloop-compat.md`](docs/cozeloop-compat.md)。
 SQLite benchmark 说明见 [`bench/README.md`](bench/README.md)。
 HTTP API 的 OpenAPI 3.0 描述见 [`docs/openapi.yaml`](docs/openapi.yaml)。

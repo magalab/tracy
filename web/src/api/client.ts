@@ -1,4 +1,4 @@
-import type { Annotation, DashboardMetrics, Page, Span, User, Workspace } from "../types";
+import type { DashboardMetrics, Page, Span, User, Workspace } from "../types";
 
 export async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -8,8 +8,16 @@ export async function request<T>(path: string, token: string, init?: RequestInit
       ...init?.headers,
     },
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error?.message ?? `Request failed (${response.status})`);
+  const raw = await response.text();
+  let data: { error?: { message?: string } } | undefined;
+  if (raw) {
+    try {
+      data = JSON.parse(raw) as { error?: { message?: string } };
+    } catch {
+      data = undefined;
+    }
+  }
+  if (!response.ok) throw new Error(data?.error?.message ?? `Request failed (${response.status})`);
   return data as T;
 }
 
@@ -36,30 +44,19 @@ export function getDashboardMetrics(token: string) {
   return request<DashboardMetrics>("/api/v1/dashboard", token);
 }
 
-export async function getTrace(id: string, token: string) {
-  const [trace, annotations] = await Promise.all([
-    request<{ spans: Span[] }>(`/api/v1/traces/${encodeURIComponent(id)}`, token),
-    request<{ items: Annotation[] }>(`/api/v1/traces/${encodeURIComponent(id)}/annotations`, token),
-  ]);
-  return { spans: trace.spans, annotations: annotations.items };
-}
-
-export function createAnnotation(
-  traceID: string,
+export async function getTrace(
+  id: string,
   token: string,
-  input: { key: string; score: number; label: string; comment: string },
+  options: { cursor?: string; limit?: number } = {},
 ) {
-  return request<Annotation>(`/api/v1/traces/${encodeURIComponent(traceID)}/annotations`, token, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-}
-
-export function deleteAnnotation(id: string, token: string) {
-  return request<void>(`/api/v1/annotations/${encodeURIComponent(id)}`, token, {
-    method: "DELETE",
-  });
+  const params = new URLSearchParams();
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.limit) params.set("limit", String(options.limit));
+  const query = params.toString();
+  return request<{ trace_id: string; spans: Span[]; next_cursor?: string }>(
+    `/api/v1/traces/${encodeURIComponent(id)}${query ? `?${query}` : ""}`,
+    token,
+  );
 }
 
 export async function login(email: string, password: string) {
@@ -76,6 +73,10 @@ export async function login(email: string, password: string) {
 
 export function getCurrentUser(token: string) {
   return request<{ user: User; workspace: Workspace }>("/api/v1/auth/me", token);
+}
+
+export function logout(token: string) {
+  return request<{ logged_out: boolean }>("/api/v1/auth/logout", token, { method: "POST" });
 }
 
 export function listWorkspaces(token: string) {

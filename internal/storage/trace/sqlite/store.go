@@ -7,14 +7,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	tracestore "github.com/panda/tracy/internal/storage/trace"
 	domain "github.com/panda/tracy/internal/trace"
 )
 
 type Store struct{ db *sql.DB }
+
+const (
+	maxTraceSpans       = 1000
+	maxTracePayloadSize = 8 << 20
+	maxMetricSamples    = 100000
+)
 
 func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 func (s *Store) Migrate(ctx context.Context) error {
@@ -51,19 +60,26 @@ func (s *Store) Append(ctx context.Context, spans []domain.Span) error {
 			return err
 		}
 	}
-	traceIDs := make(map[string]string, len(spans))
+	type traceKey struct{ projectID, traceID string }
+	traceIDs := make(map[traceKey]struct{}, len(spans))
 	for _, sp := range spans {
-		traceIDs[sp.ProjectID+"\x00"+sp.TraceID] = sp.ProjectID + "\x00" + sp.TraceID
+		traceIDs[traceKey{projectID: sp.ProjectID, traceID: sp.TraceID}] = struct{}{}
 	}
-	for _, composite := range traceIDs {
-		parts := strings.SplitN(composite, "\x00", 2)
-		if _, err = tx.ExecContext(ctx, `INSERT INTO trace_summaries(project_id,trace_id,start_time,end_time,span_count,status,input_tokens,output_tokens) SELECT project_id,trace_id,MIN(start_time),MAX(start_time + duration / 1000),COUNT(*),CASE WHEN SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) > 0 THEN 'error' ELSE 'ok' END,COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0) FROM spans WHERE project_id=? AND trace_id=? GROUP BY project_id,trace_id ON CONFLICT(project_id,trace_id) DO UPDATE SET start_time=excluded.start_time,end_time=excluded.end_time,span_count=excluded.span_count,status=excluded.status,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens`, parts[0], parts[1]); err != nil {
+	for key := range traceIDs {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO trace_summaries(project_id,trace_id,start_time,end_time,span_count,status,input_tokens,output_tokens) SELECT project_id,trace_id,MIN(start_time),MAX(start_time + duration / 1000),COUNT(*),CASE WHEN SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) > 0 THEN 'error' ELSE 'ok' END,COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0) FROM spans WHERE project_id=? AND trace_id=? GROUP BY project_id,trace_id ON CONFLICT(project_id,trace_id) DO UPDATE SET start_time=excluded.start_time,end_time=excluded.end_time,span_count=excluded.span_count,status=excluded.status,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens`, key.projectID, key.traceID); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
 }
 func (s *Store) GetTrace(ctx context.Context, projectID, traceID string) ([]domain.Span, error) {
+	var spanCount, payloadBytes int64
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(input AS BLOB))+LENGTH(CAST(output AS BLOB))+LENGTH(CAST(attributes_json AS BLOB))),0) FROM spans WHERE project_id=? AND trace_id=?`, projectID, traceID).Scan(&spanCount, &payloadBytes); err != nil {
+		return nil, err
+	}
+	if spanCount > maxTraceSpans || payloadBytes > maxTracePayloadSize {
+		return nil, tracestore.ErrTooLarge
+	}
 	rows, err := s.db.QueryContext(ctx, `SELECT project_id,trace_id,span_id,parent_span_id,name,span_kind,start_time,received_at,duration,status,status_message,input,output,input_tokens,output_tokens,attributes_json FROM spans WHERE project_id=? AND trace_id=? ORDER BY start_time,span_id`, projectID, traceID)
 	if err != nil {
 		return nil, err
@@ -87,6 +103,49 @@ func (s *Store) GetTrace(ctx context.Context, projectID, traceID string) ([]doma
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *Store) GetTracePage(ctx context.Context, projectID, traceID, cursor string, limit int) (tracestore.TracePage, error) {
+	if limit < 1 || limit > 1000 {
+		limit = 100
+	}
+	args := []any{projectID, traceID}
+	where := "project_id=? AND trace_id=?"
+	if cursor != "" {
+		start, spanID, err := decodeCursor(cursor)
+		if err != nil {
+			return tracestore.TracePage{}, fmt.Errorf("invalid cursor: %w", err)
+		}
+		where += " AND (start_time > ? OR (start_time = ? AND span_id > ?))"
+		args = append(args, start, start, spanID)
+	}
+	args = append(args, limit+1)
+	rows, err := s.db.QueryContext(ctx, `SELECT project_id,trace_id,span_id,parent_span_id,name,span_kind,start_time,received_at,duration,status,status_message,input,output,input_tokens,output_tokens,attributes_json FROM spans WHERE `+where+` ORDER BY start_time,span_id LIMIT ?`, args...)
+	if err != nil {
+		return tracestore.TracePage{}, err
+	}
+	defer rows.Close()
+	page := tracestore.TracePage{Spans: make([]domain.Span, 0, limit)}
+	for rows.Next() {
+		var sp domain.Span
+		var start, received, duration int64
+		var attrs string
+		if err := rows.Scan(&sp.ProjectID, &sp.TraceID, &sp.SpanID, &sp.ParentSpanID, &sp.Name, &sp.Kind, &start, &received, &duration, &sp.Status, &sp.StatusMessage, &sp.Input, &sp.Output, &sp.InputTokens, &sp.OutputTokens, &attrs); err != nil {
+			return tracestore.TracePage{}, err
+		}
+		sp.StartTime, sp.ReceivedAt, sp.Duration = time.UnixMicro(start).UTC(), time.UnixMicro(received).UTC(), time.Duration(duration)
+		_ = json.Unmarshal([]byte(attrs), &sp.Attributes)
+		page.Spans = append(page.Spans, sp)
+	}
+	if err := rows.Err(); err != nil {
+		return tracestore.TracePage{}, err
+	}
+	if len(page.Spans) > limit {
+		last := page.Spans[limit-1]
+		page.Spans = page.Spans[:limit]
+		page.NextCursor = encodeCursor(last.StartTime.UnixMicro(), last.SpanID)
+	}
+	return page, nil
 }
 
 func (s *Store) ListTraces(ctx context.Context, q domain.Query) (domain.Page, error) {
@@ -200,18 +259,26 @@ func (s *Store) Metrics(ctx context.Context, q domain.MetricsQuery) (domain.Metr
 	if requestCount > 0 {
 		metrics.ErrorRate = float64(errorCount) / float64(requestCount)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT end_time - start_time FROM trace_summaries WHERE project_id=? AND start_time>=? AND start_time<=? ORDER BY end_time - start_time`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro())
+	rows, err := s.db.QueryContext(ctx, `SELECT end_time - start_time FROM trace_summaries WHERE project_id=? AND start_time>=? AND start_time<=?`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro())
 	if err != nil {
 		return domain.Metrics{}, err
 	}
-	var latencies []float64
+	latencies := make([]float64, 0, maxMetricSamples)
+	rng := rand.New(rand.NewSource(1))
+	var seen int64
 	for rows.Next() {
 		var micros int64
 		if err := rows.Scan(&micros); err != nil {
 			rows.Close()
 			return domain.Metrics{}, err
 		}
-		latencies = append(latencies, float64(micros)/1000)
+		seen++
+		latency := float64(micros) / 1000
+		if len(latencies) < maxMetricSamples {
+			latencies = append(latencies, latency)
+		} else if index := rng.Int63n(seen); index < maxMetricSamples {
+			latencies[index] = latency
+		}
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -219,6 +286,8 @@ func (s *Store) Metrics(ctx context.Context, q domain.MetricsQuery) (domain.Metr
 	}
 	rows.Close()
 	if len(latencies) > 0 {
+		metrics.LatencySampled = seen > maxMetricSamples
+		sort.Float64s(latencies)
 		var total float64
 		for _, latency := range latencies {
 			total += latency

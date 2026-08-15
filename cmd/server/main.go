@@ -33,11 +33,29 @@ func main() {
 	defer traceDB.Close()
 	metaStore := meta.NewStore(metaDB)
 	must(logger, metaStore.Migrate(ctx))
+	cleanupCtx, cleanupCancel := context.WithCancel(ctx)
+	cleanupDone := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		defer close(cleanupDone)
+		_ = metaStore.CleanupExpired(cleanupCtx, time.Now().UTC())
+		for {
+			select {
+			case <-ticker.C:
+				_ = metaStore.CleanupExpired(cleanupCtx, time.Now().UTC())
+			case <-cleanupCtx.Done():
+				return
+			}
+		}
+	}()
 	traceStore := tracestore.NewStore(traceDB)
 	must(logger, traceStore.Migrate(ctx))
 	ensureDefault(ctx, metaStore, logger)
-	writer := ingest.NewWriter(traceStore, cfg.Trace.Writer.BatchSize, cfg.Trace.Writer.FlushInterval, cfg.Trace.Writer.QueueSize)
-	server := &http.Server{Addr: cfg.Server.Addr, Handler: api.NewServer(metaStore, writer, traceStore, logger).Routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
+	writer := ingest.NewWriterWithBytes(traceStore, cfg.Trace.Writer.BatchSize, cfg.Trace.Writer.FlushInterval, cfg.Trace.Writer.QueueSize, cfg.Trace.Writer.QueueBytes)
+	apiServer := api.NewServer(metaStore, writer, traceStore, logger, cfg.Server.TrustedProxies)
+	apiServer.MarkReady()
+	server := &http.Server{Addr: cfg.Server.Addr, Handler: apiServer.Routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second}
 	go func() {
 		logger.Info("server started", "addr", cfg.Server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -52,6 +70,8 @@ func main() {
 	defer cancel()
 	_ = server.Shutdown(shutdownCtx)
 	_ = writer.Close(shutdownCtx)
+	cleanupCancel()
+	<-cleanupDone
 }
 func ensureDefault(ctx context.Context, s *meta.Store, logger *slog.Logger) {
 	_, err := s.Project(ctx, "default")

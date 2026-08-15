@@ -10,6 +10,11 @@ import (
 )
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	clientIP := s.loginClientIP(r)
+	if !s.allowLogin(clientIP) {
+		errorJSON(w, http.StatusTooManyRequests, "login_rate_limited", "too many login attempts")
+		return
+	}
 	var body struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -23,6 +28,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusUnauthorized, "invalid_credentials", "email or password is invalid")
 		return
 	}
+	s.resetLogin(clientIP)
 	workspace, err := s.meta.FirstWorkspaceForUser(r.Context(), user.ID)
 	if err != nil {
 		errorJSON(w, http.StatusForbidden, "no_workspace", "user is not a member of a workspace")
@@ -44,6 +50,18 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		"user":         map[string]string{"id": user.ID, "email": user.Email, "name": user.Name},
 		"workspace":    workspace,
 	})
+}
+
+func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+		errorJSON(w, http.StatusUnauthorized, "invalid_session", "login is required")
+		return
+	}
+	if err := s.meta.DeleteSession(r.Context(), meta.HashToken(strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")))); err != nil {
+		errorJSON(w, http.StatusInternalServerError, "session_error", "could not revoke session")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"logged_out": true})
 }
 
 func (s *Server) currentUser(w http.ResponseWriter, r *http.Request) {

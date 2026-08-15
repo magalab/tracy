@@ -1,4 +1,4 @@
-.PHONY: test vet test-cozeloop build build-web web-check run
+.PHONY: test vet test-cozeloop build build-web build-platform web-check docker-build run
 
 test:
 	go test ./...
@@ -20,3 +20,11 @@ web-check:
 
 build: build-web
 	go build -o bin/tracy-server ./cmd/server
+
+build-platform: build-web
+	@test -n "$(GOOS)" && test -n "$(GOARCH)" || (echo 'GOOS and GOARCH are required' >&2; exit 1)
+	mkdir -p bin
+	CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -trimpath -ldflags='-s -w' -o bin/tracy-server-$(GOOS)-$(GOARCH) ./cmd/server
+
+docker-build:
+	docker build -t tracy:local .

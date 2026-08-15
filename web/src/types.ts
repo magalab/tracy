@@ -19,20 +19,12 @@ export type Span = {
   start_time: string;
   duration: number;
   status: string;
+  status_message?: string;
   input?: string;
   output?: string;
+  input_tokens?: number;
+  output_tokens?: number;
   attributes?: Record<string, unknown>;
-};
-
-export type Annotation = {
-  id: string;
-  trace_id: string;
-  span_id?: string;
-  key: string;
-  score?: number;
-  label?: string;
-  comment?: string;
-  created_at: string;
 };
 
 export type Page = { items: TraceSummary[]; next_cursor?: string };
@@ -44,6 +36,7 @@ export type DashboardMetrics = {
   input_tokens: number;
   output_tokens: number;
   p95_latency_ms: number;
+  latency_sampled?: boolean;
   usage_breakdown?: { key: string; span_count: number }[];
 };
 

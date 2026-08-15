@@ -118,5 +118,6 @@ type Metrics struct {
 	P50LatencyMS   float64          `json:"p50_latency_ms"`
 	P95LatencyMS   float64          `json:"p95_latency_ms"`
 	P99LatencyMS   float64          `json:"p99_latency_ms"`
+	LatencySampled bool             `json:"latency_sampled,omitempty"`
 	UsageBreakdown []UsageBreakdown `json:"usage_breakdown"`
 }

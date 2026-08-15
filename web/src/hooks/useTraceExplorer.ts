@@ -1,15 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  createAnnotation,
-  deleteAnnotation,
-  getDashboardMetrics,
-  getTrace,
-  listTraces,
-} from "../api/client";
-import type { Annotation, DashboardMetrics, Page, Span } from "../types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getDashboardMetrics, getTrace, listTraces } from "../api/client";
+import type { DashboardMetrics, Page, Span } from "../types";
 
 export function useTraceExplorer(
   token: string,
+  workspaceID: string,
   statusFilter: string,
   kindFilter: string,
   startTime: string,
@@ -18,15 +13,20 @@ export function useTraceExplorer(
   const [page, setPage] = useState<Page>({ items: [] });
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [selected, setSelected] = useState<Span[]>([]);
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [selectedID, setSelectedID] = useState("");
+  const [selectedNextCursor, setSelectedNextCursor] = useState<string | undefined>();
+  const [traceLoading, setTraceLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [cursor, setCursor] = useState<string | undefined>();
+  const pageRequestID = useRef(0);
+  const metricsRequestID = useRef(0);
+  const traceRequestID = useRef(0);
 
   const loadPage = useCallback(
     async (nextCursor?: string) => {
       if (!token) return;
+      const requestID = ++pageRequestID.current;
       setLoading(true);
       setError("");
       try {
@@ -37,12 +37,14 @@ export function useTraceExplorer(
           startTime,
           endTime,
         });
+        if (requestID !== pageRequestID.current) return;
         setPage({ ...next, items: next.items ?? [] });
         setCursor(next.next_cursor);
       } catch (err) {
+        if (requestID !== pageRequestID.current) return;
         setError(err instanceof Error ? err.message : String(err));
       } finally {
-        setLoading(false);
+        if (requestID === pageRequestID.current) setLoading(false);
       }
     },
     [endTime, kindFilter, startTime, statusFilter, token],
@@ -50,104 +52,109 @@ export function useTraceExplorer(
 
   const loadMetrics = useCallback(async () => {
     if (!token) return;
+    const requestID = ++metricsRequestID.current;
     try {
-      setMetrics(await getDashboardMetrics(token));
+      const next = await getDashboardMetrics(token);
+      if (requestID === metricsRequestID.current) setMetrics(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (requestID === metricsRequestID.current) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     }
   }, [token]);
 
   useEffect(() => {
     setSelected([]);
-    setAnnotations([]);
     setSelectedID("");
-    if (token) {
+    if (token && workspaceID) {
       void loadPage();
       void loadMetrics();
     }
-  }, [loadMetrics, loadPage, token]);
+  }, [loadMetrics, loadPage, token, workspaceID]);
 
   const openTrace = useCallback(
     async (id: string) => {
+      const requestID = ++traceRequestID.current;
       setSelectedID(id);
+      setSelected([]);
+      setSelectedNextCursor(undefined);
+      setTraceLoading(true);
       setError("");
       try {
-        const result = await getTrace(id, token);
-        setSelected(result.spans);
-        setAnnotations(result.annotations);
+        const result = await getTrace(id, token, { limit: 100 });
+        if (requestID === traceRequestID.current) {
+          setSelected(result.spans);
+          setSelectedNextCursor(result.next_cursor);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (requestID === traceRequestID.current) {
+          setSelectedID("");
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      } finally {
+        if (requestID === traceRequestID.current) setTraceLoading(false);
       }
     },
     [token],
   );
+
+  const loadMoreTrace = useCallback(async () => {
+    if (!selectedID || !selectedNextCursor || traceLoading) return;
+    const requestID = ++traceRequestID.current;
+    setTraceLoading(true);
+    try {
+      const result = await getTrace(selectedID, token, { cursor: selectedNextCursor, limit: 100 });
+      if (requestID === traceRequestID.current) {
+        setSelected((items) => [...items, ...result.spans]);
+        setSelectedNextCursor(result.next_cursor);
+      }
+    } catch (err) {
+      if (requestID === traceRequestID.current)
+        setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (requestID === traceRequestID.current) setTraceLoading(false);
+    }
+  }, [selectedID, selectedNextCursor, token, traceLoading]);
 
   const clearSelection = useCallback(() => {
+    traceRequestID.current += 1;
     setSelectedID("");
     setSelected([]);
-    setAnnotations([]);
+    setSelectedNextCursor(undefined);
   }, []);
-
-  const addAnnotation = useCallback(
-    async (input: { key: string; score: number; label: string; comment: string }) => {
-      if (!selectedID || !input.key.trim()) return;
-      try {
-        const annotation = await createAnnotation(selectedID, token, {
-          ...input,
-          key: input.key.trim(),
-        });
-        setAnnotations((items) => [...items, annotation]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [selectedID, token],
-  );
-
-  const removeAnnotation = useCallback(
-    async (id: string) => {
-      try {
-        await deleteAnnotation(id, token);
-        setAnnotations((items) => items.filter((item) => item.id !== id));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [token],
-  );
 
   return useMemo(
     () => ({
       page,
       metrics,
       selected,
-      annotations,
       selectedID,
+      selectedNextCursor,
+      traceLoading,
       loading,
       error,
       cursor,
       loadPage,
       loadMetrics,
       openTrace,
+      loadMoreTrace,
       clearSelection,
-      addAnnotation,
-      removeAnnotation,
     }),
     [
-      addAnnotation,
-      annotations,
       clearSelection,
       cursor,
       error,
       loadMetrics,
+      loadMoreTrace,
       loadPage,
       loading,
       metrics,
       openTrace,
       page,
-      removeAnnotation,
       selected,
       selectedID,
+      selectedNextCursor,
+      traceLoading,
     ],
   );
 }

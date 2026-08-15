@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tracestore "github.com/panda/tracy/internal/storage/trace"
 	domain "github.com/panda/tracy/internal/trace"
 )
 
@@ -22,6 +23,9 @@ func (f *fakeStore) Append(context.Context, []domain.Span) error {
 	return nil
 }
 func (f *fakeStore) GetTrace(context.Context, string, string) ([]domain.Span, error) { return nil, nil }
+func (f *fakeStore) GetTracePage(context.Context, string, string, string, int) (tracestore.TracePage, error) {
+	return tracestore.TracePage{}, nil
+}
 func (f *fakeStore) ListTraces(context.Context, domain.Query) (domain.Page, error) {
 	return domain.Page{}, nil
 }
@@ -31,7 +35,7 @@ func (f *fakeStore) Metrics(context.Context, domain.MetricsQuery) (domain.Metric
 
 func TestEnqueueRejectsWholeBatchWhenFull(t *testing.T) {
 	store := &fakeStore{}
-	writer := NewWriter(store, 1, time.Hour, 1)
+	writer := NewWriterWithBytes(store, 2, time.Hour, 2, 400)
 	defer writer.Close(context.Background())
 	span := domain.Span{ProjectID: "p", TraceID: "t", SpanID: "s", Name: "n"}
 	if err := writer.Enqueue([]domain.Span{span}); err != nil {
@@ -61,5 +65,25 @@ func TestWriterReportsWriteFailure(t *testing.T) {
 	stats := writer.Metrics()
 	if stats.WriteErrors != 1 || stats.Dropped != 1 || stats.LastError == "" {
 		t.Fatalf("stats=%+v", stats)
+	}
+}
+
+func TestEnqueueRejectsAfterClose(t *testing.T) {
+	writer := NewWriter(&fakeStore{}, 1, time.Hour, 1)
+	if err := writer.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	span := domain.Span{ProjectID: "p", TraceID: "t", SpanID: "s", Name: "n"}
+	if err := writer.Enqueue([]domain.Span{span}); !errors.Is(err, ErrClosed) {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestEnqueueRejectsWhenByteBudgetIsFull(t *testing.T) {
+	writer := NewWriterWithBytes(&fakeStore{}, 1, time.Hour, 2, 100)
+	defer writer.Close(context.Background())
+	span := domain.Span{ProjectID: "p", TraceID: "t", SpanID: "s", Name: "n", Input: "this payload is larger than the budget"}
+	if err := writer.Enqueue([]domain.Span{span}); !errors.Is(err, ErrFull) {
+		t.Fatalf("error=%v", err)
 	}
 }

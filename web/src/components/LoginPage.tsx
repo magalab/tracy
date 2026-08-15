@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button, Form } from "@douyinfe/semi-ui";
+import Button from "@douyinfe/semi-ui/lib/es/button";
+import { Form } from "@douyinfe/semi-ui/lib/es/form";
 import { usePreferences } from "../i18n";
 
 type LoginPageProps = {
