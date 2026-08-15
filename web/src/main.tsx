@@ -1,3 +1,4 @@
+import "@douyinfe/semi-ui/react19-adapter";
 import { lazy, StrictMode, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import Button from "@douyinfe/semi-ui/lib/es/button";
@@ -12,6 +13,7 @@ const TraceDetail = lazy(() =>
 );
 import { TraceList } from "./components/TraceList";
 import { WorkspacePicker } from "./components/WorkspacePicker";
+import { APIKeysPage } from "./components/APIKeysPage";
 import {
   getCurrentUser,
   logout as logoutRequest,
@@ -51,7 +53,7 @@ function App() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activePage, setActivePage] = useState<"overview" | "traces">("traces");
+  const [activePage, setActivePage] = useState<"overview" | "traces" | "keys">("traces");
   const explorer = useTraceExplorer(
     token,
     activeWorkspaceID,
@@ -88,7 +90,11 @@ function App() {
     void listWorkspaces(token)
       .then((data) => {
         setWorkspaces(data.items);
-        setActiveWorkspaceID(data.active_id);
+        setActiveWorkspaceID((current) =>
+          data.items.some((workspace) => workspace.id === current)
+            ? current
+            : (data.items[0]?.id ?? ""),
+        );
       })
       .catch((err) => {
         setWorkspaceError(err instanceof Error ? err.message : String(err));
@@ -102,6 +108,7 @@ function App() {
     localStorage.setItem(userKey, JSON.stringify(data.user));
     setToken(data.access_token);
     setUser(data.user);
+    setActiveWorkspaceID(data.workspace.id);
     setAuthReady(true);
   }
 
@@ -118,7 +125,7 @@ function App() {
   async function createUserWorkspace(name: string) {
     const data = await createWorkspace(token, name);
     setWorkspaces((items) => [...items, data.workspace]);
-    setActiveWorkspaceID(data.active_id);
+    setActiveWorkspaceID(data.workspace.id);
   }
 
   async function selectWorkspace(id: string) {
@@ -166,13 +173,21 @@ function App() {
         activePage={activePage}
         onPageChange={(page) => {
           setActivePage(page);
-          if (page === "overview") explorer.clearSelection();
+          if (page !== "traces") explorer.clearSelection();
         }}
       />
       <div className="app-main">
         <header className="topbar">
           <div className="trace-context">
-            <span className="eyebrow">{t(activePage === "overview" ? "overview" : "trace")}</span>
+            <span className="eyebrow">
+              {t(
+                activePage === "overview"
+                  ? "overview"
+                  : activePage === "keys"
+                    ? "apiKeys"
+                    : "trace",
+              )}
+            </span>
             <strong className="topbar-workspace">{activeWorkspace.name}</strong>
           </div>
           <div className="topbar-actions">
@@ -200,7 +215,9 @@ function App() {
         </header>
         <main className="main-content">
           <Suspense fallback={<div className="page-loading">{t("loading")}</div>}>
-            {activePage === "overview" ? (
+            {activePage === "keys" ? (
+              <APIKeysPage token={token} workspaceID={activeWorkspaceID} />
+            ) : activePage === "overview" ? (
               <section className="overview-page">
                 <div className="overview-page-heading">
                   <span className="eyebrow">{t("operations")}</span>

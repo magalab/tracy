@@ -18,7 +18,7 @@ const (
 var ErrPayloadTooLarge = errors.New("trace payload is too large")
 
 type Span struct {
-	ProjectID     string         `json:"project_id"`
+	WorkspaceID   string         `json:"workspace_id"`
 	TraceID       string         `json:"trace_id"`
 	SpanID        string         `json:"span_id"`
 	ParentSpanID  string         `json:"parent_span_id,omitempty"`
@@ -37,8 +37,8 @@ type Span struct {
 }
 
 func (s Span) Validate() error {
-	if s.ProjectID == "" || s.TraceID == "" || s.SpanID == "" || s.Name == "" {
-		return errors.New("project_id, trace_id, span_id and name are required")
+	if s.WorkspaceID == "" || s.TraceID == "" || s.SpanID == "" || s.Name == "" {
+		return errors.New("workspace_id, trace_id, span_id and name are required")
 	}
 	if len(s.TraceID) > MaxSpanIDBytes || len(s.SpanID) > MaxSpanIDBytes || len(s.ParentSpanID) > MaxSpanIDBytes || len(s.Name) > MaxNameBytes {
 		return ErrPayloadTooLarge
@@ -68,16 +68,16 @@ func (s Span) Validate() error {
 }
 
 type Query struct {
-	ProjectID, TraceID, Status, Kind, Name string
-	StartTime, EndTime                     *time.Time
-	MinDuration, MaxDuration               time.Duration
-	MinTokens, MaxTokens                   int64
-	Limit                                  int
-	Cursor                                 string
+	WorkspaceID, TraceID, Status, Kind, Name string
+	StartTime, EndTime                       *time.Time
+	MinDuration, MaxDuration                 time.Duration
+	MinTokens, MaxTokens                     int64
+	Limit                                    int
+	Cursor                                   string
 }
 
 type Summary struct {
-	ProjectID    string    `json:"project_id"`
+	WorkspaceID  string    `json:"workspace_id"`
 	TraceID      string    `json:"trace_id"`
 	StartTime    time.Time `json:"start_time"`
 	EndTime      time.Time `json:"end_time"`
@@ -93,9 +93,9 @@ type Page struct {
 }
 
 type MetricsQuery struct {
-	ProjectID string
-	StartTime time.Time
-	EndTime   time.Time
+	WorkspaceID string
+	StartTime   time.Time
+	EndTime     time.Time
 }
 
 type UsageBreakdown struct {
@@ -106,7 +106,7 @@ type UsageBreakdown struct {
 }
 
 type Metrics struct {
-	ProjectID      string           `json:"project_id"`
+	WorkspaceID    string           `json:"workspace_id"`
 	StartTime      time.Time        `json:"start_time"`
 	EndTime        time.Time        `json:"end_time"`
 	RequestCount   int64            `json:"request_count"`

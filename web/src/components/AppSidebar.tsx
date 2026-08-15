@@ -12,11 +12,11 @@ type AppSidebarProps = {
   onLogout: () => void;
   collapsed: boolean;
   onToggle: () => void;
-  activePage: "overview" | "traces";
-  onPageChange: (page: "overview" | "traces") => void;
+  activePage: "overview" | "traces" | "keys";
+  onPageChange: (page: "overview" | "traces" | "keys") => void;
 };
 
-type NavItem = { icon: string; label: TranslationKey; page: "overview" | "traces" };
+type NavItem = { icon: string; label: TranslationKey; page: "overview" | "traces" | "keys" };
 type NavGroup = { label: TranslationKey; items: NavItem[] };
 
 const groups: NavGroup[] = [
@@ -25,6 +25,7 @@ const groups: NavGroup[] = [
     items: [
       { icon: "◒", label: "overview", page: "overview" },
       { icon: "⌘", label: "trace", page: "traces" },
+      { icon: "◇", label: "apiKeys", page: "keys" },
     ],
   },
 ] as const;

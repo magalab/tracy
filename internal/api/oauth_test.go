@@ -35,10 +35,7 @@ func TestJWTOAuthTokenExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	if err := metaStore.CreateProject(ctx, meta.Project{ID: "default", Name: "Default", CreatedAt: now, UpdatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
-	if err := metaStore.CreateAPIKey(ctx, meta.APIKey{ID: "admin", ProjectID: "default", Name: "admin", Role: "admin", TokenHash: meta.HashToken("admin-token")}); err != nil {
+	if err := metaStore.CreateWorkspace(ctx, meta.Workspace{ID: "default", Name: "Default", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -50,7 +47,7 @@ func TestJWTOAuthTokenExchange(t *testing.T) {
 		t.Fatal(err)
 	}
 	publicPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER})
-	if err := metaStore.CreateOAuthApp(ctx, meta.OAuthApp{ID: "app", ClientID: "client-1", ProjectID: "default", PublicKeyID: "key-1", PublicKey: string(publicPEM), Enabled: true, CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := metaStore.CreateOAuthApp(ctx, meta.OAuthApp{ID: "app", ClientID: "client-1", WorkspaceID: "default", PublicKeyID: "key-1", PublicKey: string(publicPEM), Enabled: true, CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	traceDB, err := sqlitestore.Open(ctx, t.TempDir()+"/traces.db")
@@ -89,7 +86,7 @@ func TestJWTOAuthTokenExchange(t *testing.T) {
 		t.Fatalf("response=%+v", tokenResponse)
 	}
 	key, err := metaStore.Authenticate(ctx, tokenResponse.AccessToken)
-	if err != nil || key.ProjectID != "default" {
+	if err != nil || key.WorkspaceID != "default" {
 		t.Fatalf("issued token auth key=%+v err=%v", key, err)
 	}
 

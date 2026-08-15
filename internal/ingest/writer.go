@@ -164,7 +164,7 @@ func (w *Writer) run() {
 
 func spanSize(span domain.Span) int64 {
 	attributes, _ := json.Marshal(span.Attributes)
-	return int64(len(span.ProjectID) + len(span.TraceID) + len(span.SpanID) + len(span.ParentSpanID) + len(span.Name) + len(span.Kind) + len(span.Status) + len(span.StatusMessage) + len(span.Input) + len(span.Output) + len(attributes) + 256)
+	return int64(len(span.WorkspaceID) + len(span.TraceID) + len(span.SpanID) + len(span.ParentSpanID) + len(span.Name) + len(span.Kind) + len(span.Status) + len(span.StatusMessage) + len(span.Input) + len(span.Output) + len(attributes) + 256)
 }
 
 func batchSize(spans []domain.Span) int64 {

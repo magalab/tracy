@@ -21,25 +21,25 @@ func TestTraceSummaryAndFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	spans := []domain.Span{{ProjectID: "p", TraceID: "trace-ok", SpanID: "root", Name: "model-call", Kind: "model", StartTime: base, ReceivedAt: base, Duration: 2 * time.Millisecond, Status: "ok", InputTokens: 2, OutputTokens: 3}, {ProjectID: "p", TraceID: "trace-ok", SpanID: "child", ParentSpanID: "root", Name: "tool-call", Kind: "tool", StartTime: base.Add(time.Millisecond), ReceivedAt: base, Duration: time.Millisecond, Status: "ok", InputTokens: 1}, {ProjectID: "p", TraceID: "trace-error", SpanID: "error", Name: "failed", Kind: "tool", StartTime: base.Add(time.Hour), ReceivedAt: base, Duration: 5 * time.Millisecond, Status: "error", InputTokens: 20}}
+	spans := []domain.Span{{WorkspaceID: "p", TraceID: "trace-ok", SpanID: "root", Name: "model-call", Kind: "model", StartTime: base, ReceivedAt: base, Duration: 2 * time.Millisecond, Status: "ok", InputTokens: 2, OutputTokens: 3}, {WorkspaceID: "p", TraceID: "trace-ok", SpanID: "child", ParentSpanID: "root", Name: "tool-call", Kind: "tool", StartTime: base.Add(time.Millisecond), ReceivedAt: base, Duration: time.Millisecond, Status: "ok", InputTokens: 1}, {WorkspaceID: "p", TraceID: "trace-error", SpanID: "error", Name: "failed", Kind: "tool", StartTime: base.Add(time.Hour), ReceivedAt: base, Duration: 5 * time.Millisecond, Status: "error", InputTokens: 20}}
 	if err := store.Append(ctx, spans); err != nil {
 		t.Fatal(err)
 	}
-	page, err := store.ListTraces(ctx, domain.Query{ProjectID: "p", Limit: 10})
+	page, err := store.ListTraces(ctx, domain.Query{WorkspaceID: "p", Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Items) != 2 || page.Items[0].TraceID != "trace-error" || page.Items[0].SpanCount != 1 {
 		t.Fatalf("page=%+v", page)
 	}
-	page, err = store.ListTraces(ctx, domain.Query{ProjectID: "p", Status: "error", MinTokens: 20, MinDuration: 4 * time.Millisecond})
+	page, err = store.ListTraces(ctx, domain.Query{WorkspaceID: "p", Status: "error", MinTokens: 20, MinDuration: 4 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Items) != 1 || page.Items[0].TraceID != "trace-error" {
 		t.Fatalf("filtered page=%+v", page)
 	}
-	page, err = store.ListTraces(ctx, domain.Query{ProjectID: "p", Kind: "model", StartTime: &base})
+	page, err = store.ListTraces(ctx, domain.Query{WorkspaceID: "p", Kind: "model", StartTime: &base})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,14 +50,14 @@ func TestTraceSummaryAndFilters(t *testing.T) {
 	if err := store.Append(ctx, spans[:1]); err != nil {
 		t.Fatal(err)
 	}
-	page, err = store.ListTraces(ctx, domain.Query{ProjectID: "p", TraceID: "trace-ok"})
+	page, err = store.ListTraces(ctx, domain.Query{WorkspaceID: "p", TraceID: "trace-ok"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page.Items) != 1 || page.Items[0].Status != "error" || page.Items[0].SpanCount != 2 {
 		t.Fatalf("updated summary=%+v", page)
 	}
-	metrics, err := store.Metrics(ctx, domain.MetricsQuery{ProjectID: "p", StartTime: base.Add(-time.Minute), EndTime: base.Add(2 * time.Hour)})
+	metrics, err := store.Metrics(ctx, domain.MetricsQuery{WorkspaceID: "p", StartTime: base.Add(-time.Minute), EndTime: base.Add(2 * time.Hour)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,14 +70,14 @@ func TestTraceSummaryAndFilters(t *testing.T) {
 	if len(metrics.UsageBreakdown) != 2 || metrics.UsageBreakdown[0].Key != "tool" {
 		t.Fatalf("usage metrics=%+v", metrics.UsageBreakdown)
 	}
-	emptyPage, err := store.ListTraces(ctx, domain.Query{ProjectID: "empty-project"})
+	emptyPage, err := store.ListTraces(ctx, domain.Query{WorkspaceID: "empty-workspace"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if emptyPage.Items == nil {
 		t.Fatal("empty trace page must encode items as [] rather than null")
 	}
-	emptyMetrics, err := store.Metrics(ctx, domain.MetricsQuery{ProjectID: "empty-project", StartTime: base, EndTime: base.Add(time.Hour)})
+	emptyMetrics, err := store.Metrics(ctx, domain.MetricsQuery{WorkspaceID: "empty-workspace", StartTime: base, EndTime: base.Add(time.Hour)})
 	if err != nil {
 		t.Fatal(err)
 	}

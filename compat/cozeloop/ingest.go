@@ -39,7 +39,7 @@ type UploadSpan struct {
 	TagsBool         map[string]bool    `json:"tags_bool"`
 }
 
-func (d UploadSpanData) Map(projectID string, receivedAt time.Time) ([]domain.Span, error) {
+func (d UploadSpanData) Map(workspaceID string, receivedAt time.Time) ([]domain.Span, error) {
 	result := make([]domain.Span, 0, len(d.Spans))
 	for _, item := range d.Spans {
 		if item.TraceID == "" || item.SpanID == "" || item.SpanName == "" {
@@ -81,7 +81,7 @@ func (d UploadSpanData) Map(projectID string, receivedAt time.Time) ([]domain.Sp
 			status = "error"
 			attrs["cozeloop.status_code"] = item.StatusCode
 		}
-		result = append(result, domain.Span{ProjectID: projectID, TraceID: item.TraceID, SpanID: item.SpanID, ParentSpanID: item.ParentID, Name: item.SpanName, Kind: item.SpanType, StartTime: time.UnixMicro(item.StartedATMicros).UTC(), ReceivedAt: receivedAt.UTC(), Duration: time.Duration(item.DurationMicros) * time.Microsecond, Status: status, Input: item.Input, Output: item.Output, Attributes: attrs})
+		result = append(result, domain.Span{WorkspaceID: workspaceID, TraceID: item.TraceID, SpanID: item.SpanID, ParentSpanID: item.ParentID, Name: item.SpanName, Kind: item.SpanType, StartTime: time.UnixMicro(item.StartedATMicros).UTC(), ReceivedAt: receivedAt.UTC(), Duration: time.Duration(item.DurationMicros) * time.Microsecond, Status: status, Input: item.Input, Output: item.Output, Attributes: attrs})
 	}
 	return result, nil
 }

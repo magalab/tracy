@@ -105,7 +105,7 @@ func TestWorkloadSmoke(t *testing.T) {
 	querySamples := make([]int64, 0, 100)
 	for i := 0; i < 100; i++ {
 		sampleStart := time.Now()
-		if _, err := store.ListTraces(context.Background(), domain.Query{ProjectID: "bench", Limit: 50}); err != nil {
+		if _, err := store.ListTraces(context.Background(), domain.Query{WorkspaceID: "bench", Limit: 50}); err != nil {
 			t.Fatal(err)
 		}
 		querySamples = append(querySamples, time.Since(sampleStart).Nanoseconds())
@@ -135,7 +135,7 @@ func makeSpans(count, offset int) []domain.Span {
 	now := time.Now().UTC()
 	result := make([]domain.Span, count)
 	for i := range result {
-		result[i] = domain.Span{ProjectID: "bench", TraceID: fmt.Sprintf("trace-%d", (offset+i)/10), SpanID: fmt.Sprintf("span-%d", offset+i), Name: "benchmark", Kind: "custom", StartTime: now, ReceivedAt: now, Duration: time.Millisecond, Status: "ok", Input: "input", Output: "output", Attributes: map[string]any{"iteration": offset + i}}
+		result[i] = domain.Span{WorkspaceID: "bench", TraceID: fmt.Sprintf("trace-%d", (offset+i)/10), SpanID: fmt.Sprintf("span-%d", offset+i), Name: "benchmark", Kind: "custom", StartTime: now, ReceivedAt: now, Duration: time.Millisecond, Status: "ok", Input: "input", Output: "output", Attributes: map[string]any{"iteration": offset + i}}
 	}
 	return result
 }

@@ -7,7 +7,7 @@ import (
 )
 
 func validSpan() Span {
-	return Span{ProjectID: "project", TraceID: "trace", SpanID: "span", Name: "test", StartTime: time.Now().UTC(), Duration: time.Millisecond, Status: "ok"}
+	return Span{WorkspaceID: "workspace", TraceID: "trace", SpanID: "span", Name: "test", StartTime: time.Now().UTC(), Duration: time.Millisecond, Status: "ok"}
 }
 
 func TestValidatePayloadLimits(t *testing.T) {

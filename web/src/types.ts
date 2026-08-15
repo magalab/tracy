@@ -1,5 +1,5 @@
 export type TraceSummary = {
-  project_id: string;
+  workspace_id: string;
   trace_id: string;
   start_time: string;
   end_time: string;
@@ -10,7 +10,7 @@ export type TraceSummary = {
 };
 
 export type Span = {
-  project_id: string;
+  workspace_id: string;
   trace_id: string;
   span_id: string;
   parent_span_id?: string;
@@ -48,3 +48,15 @@ export type Workspace = {
 };
 
 export type User = { id: string; email: string; name: string };
+
+export type APIKey = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  role: string;
+  expires_at?: string;
+  revoked: boolean;
+  last_used_at?: string;
+};
+
+export type CreatedAPIKey = APIKey & { token: string };

@@ -15,18 +15,18 @@ import (
 
 var ErrNotFound = errors.New("not found")
 
-type Project struct {
+type Workspace struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 type APIKey struct {
-	ID, ProjectID, Name, TokenHash, Role string
-	UserID                               string
-	ExpiresAt                            *time.Time
-	Revoked                              bool
-	LastUsedAt                           *time.Time
+	ID, WorkspaceID, Name, TokenHash, Role string
+	UserID                                 string
+	ExpiresAt                              *time.Time
+	Revoked                                bool
+	LastUsedAt                             *time.Time
 }
 
 type User struct {
@@ -47,7 +47,7 @@ type WorkspaceMember struct {
 type OAuthApp struct {
 	ID          string    `json:"id"`
 	ClientID    string    `json:"client_id"`
-	ProjectID   string    `json:"project_id"`
+	WorkspaceID string    `json:"workspace_id"`
 	PublicKeyID string    `json:"public_key_id"`
 	PublicKey   string    `json:"public_key,omitempty"`
 	Enabled     bool      `json:"enabled"`
@@ -76,38 +76,14 @@ func HashPassword(password string) (string, error) {
 
 func (s *Store) Migrate(ctx context.Context) error { return migrate(ctx, s.db) }
 func migrate(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS workspace_members (workspace_id TEXT NOT NULL REFERENCES projects(id), user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL DEFAULT 'member', created_at INTEGER NOT NULL, PRIMARY KEY(workspace_id,user_id)); CREATE TABLE IF NOT EXISTS user_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), workspace_id TEXT NOT NULL REFERENCES projects(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id); CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'project', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER); CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash); CREATE TABLE IF NOT EXISTS oauth_apps (id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE, project_id TEXT NOT NULL REFERENCES projects(id), public_key_id TEXT NOT NULL, public_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_apps_client_id ON oauth_apps(client_id); CREATE TABLE IF NOT EXISTS oauth_access_tokens (token_hash TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expiry ON oauth_access_tokens(expires_at); CREATE TABLE IF NOT EXISTS oauth_jti (client_id TEXT NOT NULL, jti TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(client_id,jti)); CREATE INDEX IF NOT EXISTS idx_oauth_jti_expiry ON oauth_jti(expires_at);`); err != nil {
+	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS workspace_members (workspace_id TEXT NOT NULL REFERENCES workspaces(id), user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL DEFAULT 'member', created_at INTEGER NOT NULL, PRIMARY KEY(workspace_id,user_id)); CREATE TABLE IF NOT EXISTS user_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id); CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'workspace', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER); CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash); CREATE TABLE IF NOT EXISTS oauth_apps (id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), public_key_id TEXT NOT NULL, public_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_apps_client_id ON oauth_apps(client_id); CREATE TABLE IF NOT EXISTS oauth_access_tokens (token_hash TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expiry ON oauth_access_tokens(expires_at); CREATE TABLE IF NOT EXISTS oauth_jti (client_id TEXT NOT NULL, jti TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(client_id,jti)); CREATE INDEX IF NOT EXISTS idx_oauth_jti_expiry ON oauth_jti(expires_at);`); err != nil {
 		return err
 	}
-	var hasRole int
-	rows, err := db.QueryContext(ctx, `PRAGMA table_info(api_keys)`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var cid int
-		var name, typ string
-		var notNull, pk int
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
-			return err
-		}
-		if name == "role" {
-			hasRole = 1
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	if hasRole == 0 {
-		_, err = db.ExecContext(ctx, `ALTER TABLE api_keys ADD COLUMN role TEXT NOT NULL DEFAULT 'project'`)
-	}
-	return err
+	return nil
 }
 
 func (s *Store) CreateOAuthApp(ctx context.Context, app OAuthApp) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_apps(id,client_id,project_id,public_key_id,public_key,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, app.ID, app.ClientID, app.ProjectID, app.PublicKeyID, app.PublicKey, app.Enabled, app.CreatedAt.UTC().UnixMicro(), app.UpdatedAt.UTC().UnixMicro())
+	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_apps(id,client_id,workspace_id,public_key_id,public_key,enabled,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`, app.ID, app.ClientID, app.WorkspaceID, app.PublicKeyID, app.PublicKey, app.Enabled, app.CreatedAt.UTC().UnixMicro(), app.UpdatedAt.UTC().UnixMicro())
 	return err
 }
 
@@ -115,7 +91,7 @@ func (s *Store) OAuthAppByClientID(ctx context.Context, clientID string) (OAuthA
 	var app OAuthApp
 	var enabled int
 	var created, updated int64
-	err := s.db.QueryRowContext(ctx, `SELECT id,client_id,project_id,public_key_id,public_key,enabled,created_at,updated_at FROM oauth_apps WHERE client_id=?`, clientID).Scan(&app.ID, &app.ClientID, &app.ProjectID, &app.PublicKeyID, &app.PublicKey, &enabled, &created, &updated)
+	err := s.db.QueryRowContext(ctx, `SELECT id,client_id,workspace_id,public_key_id,public_key,enabled,created_at,updated_at FROM oauth_apps WHERE client_id=?`, clientID).Scan(&app.ID, &app.ClientID, &app.WorkspaceID, &app.PublicKeyID, &app.PublicKey, &enabled, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
 		return app, ErrNotFound
 	}
@@ -128,8 +104,8 @@ func (s *Store) OAuthAppByClientID(ctx context.Context, clientID string) (OAuthA
 	return app, nil
 }
 
-func (s *Store) ListOAuthApps(ctx context.Context) ([]OAuthApp, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,client_id,project_id,public_key_id,public_key,enabled,created_at,updated_at FROM oauth_apps ORDER BY created_at,id`)
+func (s *Store) ListOAuthAppsByWorkspace(ctx context.Context, workspaceID string) ([]OAuthApp, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,client_id,workspace_id,public_key_id,public_key,enabled,created_at,updated_at FROM oauth_apps WHERE workspace_id=? ORDER BY id`, workspaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +115,7 @@ func (s *Store) ListOAuthApps(ctx context.Context) ([]OAuthApp, error) {
 		var app OAuthApp
 		var enabled int
 		var created, updated int64
-		if err := rows.Scan(&app.ID, &app.ClientID, &app.ProjectID, &app.PublicKeyID, &app.PublicKey, &enabled, &created, &updated); err != nil {
+		if err := rows.Scan(&app.ID, &app.ClientID, &app.WorkspaceID, &app.PublicKeyID, &app.PublicKey, &enabled, &created, &updated); err != nil {
 			return nil, err
 		}
 		app.Enabled = enabled != 0
@@ -150,44 +126,25 @@ func (s *Store) ListOAuthApps(ctx context.Context) ([]OAuthApp, error) {
 	return result, rows.Err()
 }
 
-func (s *Store) CreateOAuthAccessToken(ctx context.Context, tokenHash, projectID string, expiresAt, createdAt time.Time) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_access_tokens(token_hash,project_id,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash, projectID, expiresAt.UTC().UnixMicro(), createdAt.UTC().UnixMicro())
+func (s *Store) CreateOAuthAccessToken(ctx context.Context, tokenHash, workspaceID string, expiresAt, createdAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_access_tokens(token_hash,workspace_id,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash, workspaceID, expiresAt.UTC().UnixMicro(), createdAt.UTC().UnixMicro())
 	return err
 }
-func (s *Store) CreateProject(ctx context.Context, p Project) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO projects(id,name,created_at,updated_at) VALUES(?,?,?,?)`, p.ID, p.Name, p.CreatedAt.UnixMicro(), p.UpdatedAt.UnixMicro())
+func (s *Store) CreateWorkspace(ctx context.Context, p Workspace) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO workspaces(id,name,created_at,updated_at) VALUES(?,?,?,?)`, p.ID, p.Name, p.CreatedAt.UnixMicro(), p.UpdatedAt.UnixMicro())
 	return err
 }
 
-func (s *Store) CreateWorkspaceForUser(ctx context.Context, p Project, member WorkspaceMember) error {
+func (s *Store) CreateWorkspaceForUser(ctx context.Context, p Workspace, member WorkspaceMember) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO projects(id,name,created_at,updated_at) VALUES(?,?,?,?)`, p.ID, p.Name, p.CreatedAt.UTC().UnixMicro(), p.UpdatedAt.UTC().UnixMicro()); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO workspaces(id,name,created_at,updated_at) VALUES(?,?,?,?)`, p.ID, p.Name, p.CreatedAt.UTC().UnixMicro(), p.UpdatedAt.UTC().UnixMicro()); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_members(workspace_id,user_id,role,created_at) VALUES(?,?,?,?)`, member.WorkspaceID, member.UserID, member.Role, member.CreatedAt.UTC().UnixMicro()); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *Store) CreateProjectWithAPIKey(ctx context.Context, p Project, k APIKey) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO projects(id,name,created_at,updated_at) VALUES(?,?,?,?)`, p.ID, p.Name, p.CreatedAt.UTC().UnixMicro(), p.UpdatedAt.UTC().UnixMicro()); err != nil {
-		return err
-	}
-	var exp any
-	if k.ExpiresAt != nil {
-		exp = k.ExpiresAt.UTC().UnixMicro()
-	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO api_keys(id,project_id,name,token_hash,role,expires_at,revoked) VALUES(?,?,?,?,?,?,?)`, k.ID, k.ProjectID, k.Name, k.TokenHash, k.Role, exp, k.Revoked); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -240,8 +197,8 @@ func (s *Store) AddWorkspaceMember(ctx context.Context, member WorkspaceMember) 
 	return err
 }
 
-func (s *Store) CreateSession(ctx context.Context, tokenHash, userID, workspaceID string, expiresAt, createdAt time.Time) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO user_sessions(token_hash,user_id,workspace_id,expires_at,created_at) VALUES(?,?,?,?,?)`, tokenHash, userID, workspaceID, expiresAt.UTC().UnixMicro(), createdAt.UTC().UnixMicro())
+func (s *Store) CreateSession(ctx context.Context, tokenHash, userID string, expiresAt, createdAt time.Time) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO user_sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash, userID, expiresAt.UTC().UnixMicro(), createdAt.UTC().UnixMicro())
 	return err
 }
 
@@ -262,29 +219,29 @@ func (s *Store) AuthenticateUser(ctx context.Context, email, password string) (U
 	return user, nil
 }
 
-func (s *Store) FirstWorkspaceForUser(ctx context.Context, userID string) (Project, error) {
-	var project Project
+func (s *Store) FirstWorkspaceForUser(ctx context.Context, userID string) (Workspace, error) {
+	var workspace Workspace
 	var created, updated int64
-	err := s.db.QueryRowContext(ctx, `SELECT p.id,p.name,p.created_at,p.updated_at FROM projects p JOIN workspace_members m ON m.workspace_id=p.id WHERE m.user_id=? ORDER BY p.created_at,p.id LIMIT 1`, userID).Scan(&project.ID, &project.Name, &created, &updated)
+	err := s.db.QueryRowContext(ctx, `SELECT p.id,p.name,p.created_at,p.updated_at FROM workspaces p JOIN workspace_members m ON m.workspace_id=p.id WHERE m.user_id=? ORDER BY p.created_at,p.id LIMIT 1`, userID).Scan(&workspace.ID, &workspace.Name, &created, &updated)
 	if errors.Is(err, sql.ErrNoRows) {
-		return project, ErrNotFound
+		return workspace, ErrNotFound
 	}
 	if err == nil {
-		project.CreatedAt = time.UnixMicro(created).UTC()
-		project.UpdatedAt = time.UnixMicro(updated).UTC()
+		workspace.CreatedAt = time.UnixMicro(created).UTC()
+		workspace.UpdatedAt = time.UnixMicro(updated).UTC()
 	}
-	return project, err
+	return workspace, err
 }
 
-func (s *Store) ListWorkspacesForUser(ctx context.Context, userID string) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT p.id,p.name,p.created_at,p.updated_at FROM projects p JOIN workspace_members m ON m.workspace_id=p.id WHERE m.user_id=? ORDER BY p.created_at,p.id`, userID)
+func (s *Store) ListWorkspacesForUser(ctx context.Context, userID string) ([]Workspace, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT p.id,p.name,p.created_at,p.updated_at FROM workspaces p JOIN workspace_members m ON m.workspace_id=p.id WHERE m.user_id=? ORDER BY p.created_at,p.id`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	workspaces := make([]Project, 0)
+	workspaces := make([]Workspace, 0)
 	for rows.Next() {
-		var workspace Project
+		var workspace Workspace
 		var created, updated int64
 		if err := rows.Scan(&workspace.ID, &workspace.Name, &created, &updated); err != nil {
 			return nil, err
@@ -305,28 +262,30 @@ func (s *Store) UserCanAccessWorkspace(ctx context.Context, userID, workspaceID 
 	return err
 }
 
-func (s *Store) SwitchSessionWorkspace(ctx context.Context, tokenHash, userID, workspaceID string) error {
-	if err := s.UserCanAccessWorkspace(ctx, userID, workspaceID); err != nil {
-		return err
+func (s *Store) WorkspaceMemberRole(ctx context.Context, userID, workspaceID string) (string, error) {
+	var role string
+	err := s.db.QueryRowContext(ctx, `SELECT role FROM workspace_members WHERE user_id=? AND workspace_id=?`, userID, workspaceID).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE user_sessions SET workspace_id=? WHERE token_hash=? AND user_id=?`, workspaceID, tokenHash, userID)
-	return err
+	return role, err
 }
+
 func (s *Store) CreateAPIKey(ctx context.Context, k APIKey) error {
 	if k.Role == "" {
-		k.Role = "project"
+		k.Role = "workspace"
 	}
 	var exp any
 	if k.ExpiresAt != nil {
 		exp = k.ExpiresAt.UnixMicro()
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO api_keys(id,project_id,name,token_hash,role,expires_at,revoked) VALUES(?,?,?,?,?,?,?)`, k.ID, k.ProjectID, k.Name, k.TokenHash, k.Role, exp, k.Revoked)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO api_keys(id,workspace_id,name,token_hash,role,expires_at,revoked) VALUES(?,?,?,?,?,?,?)`, k.ID, k.WorkspaceID, k.Name, k.TokenHash, k.Role, exp, k.Revoked)
 	return err
 }
-func (s *Store) Project(ctx context.Context, id string) (Project, error) {
-	var p Project
+func (s *Store) Workspace(ctx context.Context, id string) (Workspace, error) {
+	var p Workspace
 	var c, u int64
-	err := s.db.QueryRowContext(ctx, `SELECT id,name,created_at,updated_at FROM projects WHERE id=?`, id).Scan(&p.ID, &p.Name, &c, &u)
+	err := s.db.QueryRowContext(ctx, `SELECT id,name,created_at,updated_at FROM workspaces WHERE id=?`, id).Scan(&p.ID, &p.Name, &c, &u)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, ErrNotFound
 	}
@@ -340,13 +299,13 @@ func (s *Store) Authenticate(ctx context.Context, token string) (APIKey, error) 
 	var k APIKey
 	var exp, last sql.NullInt64
 	var revoked int
-	err := s.db.QueryRowContext(ctx, `SELECT id,project_id,name,token_hash,role,expires_at,revoked,last_used_at FROM api_keys WHERE token_hash=?`, HashToken(token)).Scan(&k.ID, &k.ProjectID, &k.Name, &k.TokenHash, &k.Role, &exp, &revoked, &last)
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,token_hash,role,expires_at,revoked,last_used_at FROM api_keys WHERE token_hash=?`, HashToken(token)).Scan(&k.ID, &k.WorkspaceID, &k.Name, &k.TokenHash, &k.Role, &exp, &revoked, &last)
 	if errors.Is(err, sql.ErrNoRows) {
 		var expires int64
-		err = s.db.QueryRowContext(ctx, `SELECT project_id,expires_at FROM oauth_access_tokens WHERE token_hash=? AND expires_at>?`, HashToken(token), time.Now().UTC().UnixMicro()).Scan(&k.ProjectID, &expires)
+		err = s.db.QueryRowContext(ctx, `SELECT workspace_id,expires_at FROM oauth_access_tokens WHERE token_hash=? AND expires_at>?`, HashToken(token), time.Now().UTC().UnixMicro()).Scan(&k.WorkspaceID, &expires)
 		if errors.Is(err, sql.ErrNoRows) {
-			var userID, workspaceID string
-			err = s.db.QueryRowContext(ctx, `SELECT user_id,workspace_id FROM user_sessions WHERE token_hash=? AND expires_at>?`, HashToken(token), time.Now().UTC().UnixMicro()).Scan(&userID, &workspaceID)
+			var userID string
+			err = s.db.QueryRowContext(ctx, `SELECT user_id FROM user_sessions WHERE token_hash=? AND expires_at>?`, HashToken(token), time.Now().UTC().UnixMicro()).Scan(&userID)
 			if errors.Is(err, sql.ErrNoRows) {
 				return APIKey{}, ErrNotFound
 			}
@@ -355,7 +314,6 @@ func (s *Store) Authenticate(ctx context.Context, token string) (APIKey, error) 
 			}
 			k.ID = "user-session"
 			k.UserID = userID
-			k.ProjectID = workspaceID
 			k.Name = "User session"
 			k.Role = "member"
 			return k, nil
@@ -365,7 +323,7 @@ func (s *Store) Authenticate(ctx context.Context, token string) (APIKey, error) 
 		}
 		k.ID = "oauth-access-token"
 		k.Name = "OAuth access token"
-		k.Role = "project"
+		k.Role = "workspace"
 		expiry := time.UnixMicro(expires).UTC()
 		k.ExpiresAt = &expiry
 		return k, nil
@@ -404,37 +362,12 @@ func (s *Store) CleanupExpired(ctx context.Context, now time.Time) error {
 	return err
 }
 
-func (s *Store) EnsureAdmin(ctx context.Context, keyID string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE api_keys SET role='admin' WHERE id=?`, keyID)
-	return err
-}
-
-func (s *Store) ListProjects(ctx context.Context) ([]Project, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,name,created_at,updated_at FROM projects ORDER BY created_at, id`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var result []Project
-	for rows.Next() {
-		var p Project
-		var created, updated int64
-		if err := rows.Scan(&p.ID, &p.Name, &created, &updated); err != nil {
-			return nil, err
-		}
-		p.CreatedAt = time.UnixMicro(created).UTC()
-		p.UpdatedAt = time.UnixMicro(updated).UTC()
-		result = append(result, p)
-	}
-	return result, rows.Err()
-}
-
-func (s *Store) ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, error) {
-	query := `SELECT id,project_id,name,token_hash,role,expires_at,revoked,last_used_at FROM api_keys`
+func (s *Store) ListAPIKeys(ctx context.Context, workspaceID string) ([]APIKey, error) {
+	query := `SELECT id,workspace_id,name,token_hash,role,expires_at,revoked,last_used_at FROM api_keys`
 	args := []any{}
-	if projectID != "" {
-		query += ` WHERE project_id=?`
-		args = append(args, projectID)
+	if workspaceID != "" {
+		query += ` WHERE workspace_id=?`
+		args = append(args, workspaceID)
 	}
 	query += ` ORDER BY id`
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -447,7 +380,7 @@ func (s *Store) ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, er
 		var k APIKey
 		var exp, last sql.NullInt64
 		var revoked int
-		if err := rows.Scan(&k.ID, &k.ProjectID, &k.Name, &k.TokenHash, &k.Role, &exp, &revoked, &last); err != nil {
+		if err := rows.Scan(&k.ID, &k.WorkspaceID, &k.Name, &k.TokenHash, &k.Role, &exp, &revoked, &last); err != nil {
 			return nil, err
 		}
 		k.Revoked = revoked != 0
@@ -462,6 +395,29 @@ func (s *Store) ListAPIKeys(ctx context.Context, projectID string) ([]APIKey, er
 		result = append(result, k)
 	}
 	return result, rows.Err()
+}
+
+func (s *Store) APIKeyByID(ctx context.Context, id string) (APIKey, error) {
+	var k APIKey
+	var exp, last sql.NullInt64
+	var revoked int
+	err := s.db.QueryRowContext(ctx, `SELECT id,workspace_id,name,token_hash,role,expires_at,revoked,last_used_at FROM api_keys WHERE id=?`, id).Scan(&k.ID, &k.WorkspaceID, &k.Name, &k.TokenHash, &k.Role, &exp, &revoked, &last)
+	if errors.Is(err, sql.ErrNoRows) {
+		return k, ErrNotFound
+	}
+	if err != nil {
+		return k, err
+	}
+	k.Revoked = revoked != 0
+	if exp.Valid {
+		t := time.UnixMicro(exp.Int64).UTC()
+		k.ExpiresAt = &t
+	}
+	if last.Valid {
+		t := time.UnixMicro(last.Int64).UTC()
+		k.LastUsedAt = &t
+	}
+	return k, nil
 }
 
 func (s *Store) RevokeAPIKey(ctx context.Context, id string) error {

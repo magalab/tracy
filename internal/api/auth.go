@@ -40,7 +40,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	if err := s.meta.CreateSession(r.Context(), meta.HashToken(token), user.ID, workspace.ID, now.Add(24*time.Hour), now); err != nil {
+	if err := s.meta.CreateSession(r.Context(), meta.HashToken(token), user.ID, now.Add(24*time.Hour), now); err != nil {
 		errorJSON(w, http.StatusInternalServerError, "session_error", "could not persist session")
 		return
 	}
@@ -71,7 +71,7 @@ func (s *Server) currentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if key.UserID == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"user": nil, "workspace_id": key.ProjectID, "auth_type": "api_key"})
+		writeJSON(w, http.StatusOK, map[string]any{"user": nil, "workspace_id": key.WorkspaceID, "auth_type": "api_key"})
 		return
 	}
 	user, err := s.meta.UserByID(r.Context(), key.UserID)
@@ -79,10 +79,5 @@ func (s *Server) currentUser(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusUnauthorized, "invalid_session", "user session is invalid")
 		return
 	}
-	workspace, err := s.meta.Project(r.Context(), key.ProjectID)
-	if err != nil {
-		errorJSON(w, http.StatusUnauthorized, "invalid_session", "workspace is unavailable")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"user": user, "workspace": workspace, "auth_type": "session"})
+	writeJSON(w, http.StatusOK, map[string]any{"user": user, "auth_type": "session"})
 }

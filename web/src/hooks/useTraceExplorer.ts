@@ -30,7 +30,7 @@ export function useTraceExplorer(
       setLoading(true);
       setError("");
       try {
-        const next = await listTraces(token, {
+        const next = await listTraces(token, workspaceID, {
           cursor: nextCursor,
           status: statusFilter,
           kind: kindFilter,
@@ -47,21 +47,21 @@ export function useTraceExplorer(
         if (requestID === pageRequestID.current) setLoading(false);
       }
     },
-    [endTime, kindFilter, startTime, statusFilter, token],
+    [endTime, kindFilter, startTime, statusFilter, token, workspaceID],
   );
 
   const loadMetrics = useCallback(async () => {
     if (!token) return;
     const requestID = ++metricsRequestID.current;
     try {
-      const next = await getDashboardMetrics(token);
+      const next = await getDashboardMetrics(token, workspaceID);
       if (requestID === metricsRequestID.current) setMetrics(next);
     } catch (err) {
       if (requestID === metricsRequestID.current) {
         setError(err instanceof Error ? err.message : String(err));
       }
     }
-  }, [token]);
+  }, [token, workspaceID]);
 
   useEffect(() => {
     setSelected([]);
@@ -81,7 +81,7 @@ export function useTraceExplorer(
       setTraceLoading(true);
       setError("");
       try {
-        const result = await getTrace(id, token, { limit: 100 });
+        const result = await getTrace(id, token, workspaceID, { limit: 100 });
         if (requestID === traceRequestID.current) {
           setSelected(result.spans);
           setSelectedNextCursor(result.next_cursor);
@@ -95,7 +95,7 @@ export function useTraceExplorer(
         if (requestID === traceRequestID.current) setTraceLoading(false);
       }
     },
-    [token],
+    [token, workspaceID],
   );
 
   const loadMoreTrace = useCallback(async () => {
@@ -103,7 +103,10 @@ export function useTraceExplorer(
     const requestID = ++traceRequestID.current;
     setTraceLoading(true);
     try {
-      const result = await getTrace(selectedID, token, { cursor: selectedNextCursor, limit: 100 });
+      const result = await getTrace(selectedID, token, workspaceID, {
+        cursor: selectedNextCursor,
+        limit: 100,
+      });
       if (requestID === traceRequestID.current) {
         setSelected((items) => [...items, ...result.spans]);
         setSelectedNextCursor(result.next_cursor);
@@ -114,7 +117,7 @@ export function useTraceExplorer(
     } finally {
       if (requestID === traceRequestID.current) setTraceLoading(false);
     }
-  }, [selectedID, selectedNextCursor, token, traceLoading]);
+  }, [selectedID, selectedNextCursor, token, traceLoading, workspaceID]);
 
   const clearSelection = useCallback(() => {
     traceRequestID.current += 1;

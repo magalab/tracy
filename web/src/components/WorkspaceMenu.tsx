@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { IconCopy, IconTick } from "@douyinfe/semi-icons";
+import { Toast } from "@douyinfe/semi-ui";
 import { usePreferences } from "../i18n";
 import type { Workspace } from "../types";
 import Button from "@douyinfe/semi-ui/lib/es/button";
@@ -17,6 +19,7 @@ export function WorkspaceMenu({ workspaces, activeID, onSelect, onCreate }: Work
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
+  const [copiedID, setCopiedID] = useState(false);
   const active = workspaces.find((workspace) => workspace.id === activeID);
 
   async function create() {
@@ -31,9 +34,38 @@ export function WorkspaceMenu({ workspaces, activeID, onSelect, onCreate }: Work
     }
   }
 
+  async function copyWorkspaceID() {
+    if (!active?.id) return;
+    try {
+      await navigator.clipboard.writeText(active.id);
+      setCopiedID(true);
+      Toast.success({ content: t("workspaceIDCopied"), showClose: false });
+      window.setTimeout(() => setCopiedID(false), 1800);
+    } catch (err) {
+      Toast.error({
+        content: err instanceof Error ? err.message : t("copyFailed"),
+        showClose: false,
+      });
+    }
+  }
+
   const content = (
     <div className="workspace-menu-popover">
       <span className="workspace-menu-title">{t("switchWorkspace")}</span>
+      <div className="workspace-menu-current">
+        <span>
+          <small>{t("workspaceID")}</small>
+          <b>{active?.id ?? "—"}</b>
+        </span>
+        <Button
+          className="workspace-copy-button"
+          aria-label={copiedID ? t("workspaceIDCopied") : t("copyWorkspaceID")}
+          title={copiedID ? t("workspaceIDCopied") : t("copyWorkspaceID")}
+          icon={copiedID ? <IconTick /> : <IconCopy />}
+          onClick={() => void copyWorkspaceID()}
+          disabled={!active?.id}
+        />
+      </div>
       <div className="workspace-menu-list">
         {workspaces.map((workspace) => (
           <button

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { IconPlus } from "@douyinfe/semi-icons";
 import { usePreferences } from "../i18n";
 import type { Workspace } from "../types";
 import Button from "@douyinfe/semi-ui/lib/es/button";
@@ -73,8 +74,16 @@ export function WorkspacePicker({
             placeholder={t("workspaceName")}
             rules={[{ required: true, message: t("workspaceNameRequired") }]}
           />
-          <Button htmlType="submit" loading={creating} theme="solid" type="primary">
-            {t("createWorkspace")}
+          <Button
+            className="workspace-create-button"
+            aria-label={t("createWorkspace")}
+            title={t("createWorkspace")}
+            htmlType="submit"
+            loading={creating}
+            theme="solid"
+            type="primary"
+          >
+            <IconPlus />
           </Button>
         </Form>
       </section>
