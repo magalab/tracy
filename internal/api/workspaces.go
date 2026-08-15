@@ -20,7 +20,7 @@ func (s *Server) listUserWorkspaces(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list workspaces")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items, "active_id": key.ProjectID})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 func (s *Server) createUserWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -46,16 +46,12 @@ func (s *Server) createUserWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	workspace := meta.Project{ID: id, Name: body.Name, CreatedAt: now, UpdatedAt: now}
+	workspace := meta.Workspace{ID: id, Name: body.Name, CreatedAt: now, UpdatedAt: now}
 	if err := s.meta.CreateWorkspaceForUser(r.Context(), workspace, meta.WorkspaceMember{WorkspaceID: id, UserID: key.UserID, Role: "owner", CreatedAt: now}); err != nil {
 		errorJSON(w, http.StatusConflict, "workspace_exists", "could not create workspace")
 		return
 	}
-	if err := s.meta.SwitchSessionWorkspace(r.Context(), meta.HashToken(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), key.UserID, id); err != nil {
-		errorJSON(w, http.StatusInternalServerError, "session_error", "could not activate workspace")
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"workspace": workspace, "active_id": id})
+	writeJSON(w, http.StatusCreated, map[string]any{"workspace": workspace})
 }
 
 func (s *Server) switchUserWorkspace(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +60,7 @@ func (s *Server) switchUserWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	workspaceID := r.PathValue("workspaceID")
-	if err := s.meta.SwitchSessionWorkspace(r.Context(), meta.HashToken(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")), key.UserID, workspaceID); err != nil {
+	if err := s.meta.UserCanAccessWorkspace(r.Context(), key.UserID, workspaceID); err != nil {
 		if errors.Is(err, meta.ErrNotFound) {
 			errorJSON(w, http.StatusForbidden, "workspace_forbidden", "user cannot access this workspace")
 			return
@@ -72,7 +68,7 @@ func (s *Server) switchUserWorkspace(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusInternalServerError, "session_error", "could not switch workspace")
 		return
 	}
-	workspace, err := s.meta.Project(r.Context(), workspaceID)
+	workspace, err := s.meta.Workspace(r.Context(), workspaceID)
 	if errors.Is(err, meta.ErrNotFound) {
 		errorJSON(w, http.StatusNotFound, "workspace_not_found", "workspace was not found")
 		return
@@ -81,7 +77,7 @@ func (s *Server) switchUserWorkspace(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not load workspace")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"workspace": workspace, "active_id": workspaceID})
+	writeJSON(w, http.StatusOK, map[string]any{"workspace": workspace})
 }
 
 func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (meta.APIKey, bool) {
@@ -91,4 +87,129 @@ func (s *Server) requireUser(w http.ResponseWriter, r *http.Request) (meta.APIKe
 		return meta.APIKey{}, false
 	}
 	return key, true
+}
+
+func (s *Server) requireWorkspaceOwner(w http.ResponseWriter, r *http.Request) (meta.APIKey, string, bool) {
+	key, ok := s.requireUser(w, r)
+	if !ok {
+		return meta.APIKey{}, "", false
+	}
+	workspaceID := r.PathValue("workspaceID")
+	return s.requireWorkspaceOwnerID(w, r, key, workspaceID)
+}
+
+func (s *Server) requireWorkspaceOwnerForHeaderValue(w http.ResponseWriter, r *http.Request) (meta.APIKey, string, bool) {
+	key, ok := s.requireUser(w, r)
+	if !ok {
+		return meta.APIKey{}, "", false
+	}
+	workspaceID, ok := s.workspaceForRequest(w, r, key)
+	if !ok {
+		return meta.APIKey{}, "", false
+	}
+	return s.requireWorkspaceOwnerID(w, r, key, workspaceID)
+}
+
+func (s *Server) requireWorkspaceOwnerForHeader(w http.ResponseWriter, r *http.Request) bool {
+	_, _, ok := s.requireWorkspaceOwnerForHeaderValue(w, r)
+	return ok
+}
+
+func (s *Server) requireWorkspaceOwnerID(w http.ResponseWriter, r *http.Request, key meta.APIKey, workspaceID string) (meta.APIKey, string, bool) {
+	role, err := s.meta.WorkspaceMemberRole(r.Context(), key.UserID, workspaceID)
+	if errors.Is(err, meta.ErrNotFound) {
+		errorJSON(w, http.StatusForbidden, "workspace_forbidden", "user cannot manage this workspace")
+		return meta.APIKey{}, "", false
+	}
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not load workspace membership")
+		return meta.APIKey{}, "", false
+	}
+	if role != "owner" {
+		errorJSON(w, http.StatusForbidden, "owner_required", "workspace owner is required")
+		return meta.APIKey{}, "", false
+	}
+	return key, workspaceID, true
+}
+
+func (s *Server) listUserWorkspaceKeys(w http.ResponseWriter, r *http.Request) {
+	_, workspaceID, ok := s.requireWorkspaceOwner(w, r)
+	if !ok {
+		return
+	}
+	if _, err := s.meta.Workspace(r.Context(), workspaceID); errors.Is(err, meta.ErrNotFound) {
+		errorJSON(w, http.StatusNotFound, "workspace_not_found", "workspace was not found")
+		return
+	} else if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not load workspace")
+		return
+	}
+	keys, err := s.meta.ListAPIKeys(r.Context(), workspaceID)
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list API keys")
+		return
+	}
+	result := make([]keyView, 0, len(keys))
+	for _, key := range keys {
+		result = append(result, keyView{ID: key.ID, WorkspaceID: key.WorkspaceID, Name: key.Name, Role: key.Role, ExpiresAt: key.ExpiresAt, Revoked: key.Revoked, LastUsedAt: key.LastUsedAt})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": result})
+}
+
+func (s *Server) createUserWorkspaceKey(w http.ResponseWriter, r *http.Request) {
+	_, workspaceID, ok := s.requireWorkspaceOwner(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Name      string `json:"name"`
+		ExpiresAt string `json:"expires_at"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
+		return
+	}
+	key, token, err := s.newKey(workspaceID, body.Name, "workspace")
+	if err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_key", err.Error())
+		return
+	}
+	if body.ExpiresAt != "" {
+		expires, parseErr := time.Parse(time.RFC3339, body.ExpiresAt)
+		if parseErr != nil || !expires.After(time.Now().UTC()) {
+			errorJSON(w, http.StatusBadRequest, "invalid_expires_at", "expires_at must be a future RFC3339 timestamp")
+			return
+		}
+		key.ExpiresAt = &expires
+	}
+	if err := s.meta.CreateAPIKey(r.Context(), key); err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not save API key")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"api_key": keyView{ID: key.ID, WorkspaceID: key.WorkspaceID, Name: key.Name, Role: key.Role, Token: token, ExpiresAt: key.ExpiresAt}})
+}
+
+func (s *Server) revokeUserWorkspaceKey(w http.ResponseWriter, r *http.Request) {
+	_, workspaceID, ok := s.requireWorkspaceOwner(w, r)
+	if !ok {
+		return
+	}
+	target, err := s.meta.APIKeyByID(r.Context(), r.PathValue("keyID"))
+	if errors.Is(err, meta.ErrNotFound) {
+		errorJSON(w, http.StatusNotFound, "key_not_found", "API key was not found")
+		return
+	}
+	if err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not inspect API key")
+		return
+	}
+	if target.WorkspaceID != workspaceID {
+		errorJSON(w, http.StatusNotFound, "key_not_found", "API key was not found")
+		return
+	}
+	if err := s.meta.RevokeAPIKey(r.Context(), target.ID); err != nil {
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not revoke API key")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"revoked": true})
 }

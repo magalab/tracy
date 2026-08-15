@@ -217,55 +217,208 @@ func TestLogoutContract(t *testing.T) {
 	}
 }
 
-func TestAdminContract(t *testing.T) {
+func TestWorkspaceAPIKeysContract(t *testing.T) {
 	base := strings.TrimRight(os.Getenv("BASE_URL"), "/")
-	admin := os.Getenv("TRACY_ADMIN_API_KEY")
-	if base == "" || admin == "" {
-		t.Skip("set BASE_URL and TRACY_ADMIN_API_KEY to run admin contract tests")
+	email, password := os.Getenv("TRACY_TEST_EMAIL"), os.Getenv("TRACY_TEST_PASSWORD")
+	if base == "" || email == "" || password == "" {
+		t.Skip("set BASE_URL, TRACY_TEST_EMAIL and TRACY_TEST_PASSWORD to run workspace key contract tests")
 	}
-	body, _ := json.Marshal(map[string]string{"name": "contract-admin-project", "key_name": "contract-key"})
-	req, _ := http.NewRequest(http.MethodPost, base+"/api/v1/projects", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+admin)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	body, _ := json.Marshal(map[string]string{"email": email, "password": password})
+	login, _ := http.NewRequest(http.MethodPost, base+"/api/v1/auth/login", bytes.NewReader(body))
+	login.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(login)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("create project status=%d", resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login status=%d", resp.StatusCode)
 	}
-	var response struct {
+	var session struct {
+		Token     string `json:"access_token"`
+		Workspace struct {
+			ID string `json:"id"`
+		} `json:"workspace"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
+		t.Fatal(err)
+	}
+	if session.Token == "" || session.Workspace.ID == "" {
+		t.Fatalf("incomplete session response: %+v", session)
+	}
+	workspaceID := session.Workspace.ID
+	unauthenticatedKeys, _ := http.NewRequest(http.MethodGet, base+"/api/v1/workspaces/"+workspaceID+"/keys", nil)
+	unauthenticatedKeysResp, err := http.DefaultClient.Do(unauthenticatedKeys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unauthenticatedKeysResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated workspace keys status=%d", unauthenticatedKeysResp.StatusCode)
+	}
+	_ = unauthenticatedKeysResp.Body.Close()
+	withoutWorkspace, _ := http.NewRequest(http.MethodGet, base+"/api/v1/traces", nil)
+	withoutWorkspace.Header.Set("Authorization", "Bearer "+session.Token)
+	withoutWorkspaceResp, err := http.DefaultClient.Do(withoutWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withoutWorkspaceResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("trace request without workspace status=%d", withoutWorkspaceResp.StatusCode)
+	}
+	_ = withoutWorkspaceResp.Body.Close()
+	withWorkspace, _ := http.NewRequest(http.MethodGet, base+"/api/v1/traces", nil)
+	withWorkspace.Header.Set("Authorization", "Bearer "+session.Token)
+	withWorkspace.Header.Set("X-Tracy-Workspace-ID", workspaceID)
+	withWorkspaceResp, err := http.DefaultClient.Do(withWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withWorkspaceResp.StatusCode != http.StatusOK {
+		t.Fatalf("trace request with workspace status=%d", withWorkspaceResp.StatusCode)
+	}
+	_ = withWorkspaceResp.Body.Close()
+	statsWithoutWorkspace, _ := http.NewRequest(http.MethodGet, base+"/api/v1/ingest/stats", nil)
+	statsWithoutWorkspace.Header.Set("Authorization", "Bearer "+session.Token)
+	statsWithoutWorkspaceResp, err := http.DefaultClient.Do(statsWithoutWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statsWithoutWorkspaceResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("ingest stats without workspace status=%d", statsWithoutWorkspaceResp.StatusCode)
+	}
+	_ = statsWithoutWorkspaceResp.Body.Close()
+	stats, _ := http.NewRequest(http.MethodGet, base+"/api/v1/ingest/stats", nil)
+	stats.Header.Set("Authorization", "Bearer "+session.Token)
+	stats.Header.Set("X-Tracy-Workspace-ID", workspaceID)
+	statsResp, err := http.DefaultClient.Do(stats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statsResp.StatusCode != http.StatusOK {
+		t.Fatalf("ingest stats status=%d", statsResp.StatusCode)
+	}
+	_ = statsResp.Body.Close()
+	oauthWithoutWorkspace, _ := http.NewRequest(http.MethodGet, base+"/api/v1/oauth/apps", nil)
+	oauthWithoutWorkspace.Header.Set("Authorization", "Bearer "+session.Token)
+	oauthWithoutWorkspaceResp, err := http.DefaultClient.Do(oauthWithoutWorkspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oauthWithoutWorkspaceResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("OAuth apps without workspace status=%d", oauthWithoutWorkspaceResp.StatusCode)
+	}
+	_ = oauthWithoutWorkspaceResp.Body.Close()
+	oauthForbidden, _ := http.NewRequest(http.MethodGet, base+"/api/v1/oauth/apps", nil)
+	oauthForbidden.Header.Set("Authorization", "Bearer "+session.Token)
+	oauthForbidden.Header.Set("X-Tracy-Workspace-ID", "workspace-does-not-exist")
+	oauthForbiddenResp, err := http.DefaultClient.Do(oauthForbidden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oauthForbiddenResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("OAuth apps inaccessible workspace status=%d", oauthForbiddenResp.StatusCode)
+	}
+	_ = oauthForbiddenResp.Body.Close()
+	oauthList, _ := http.NewRequest(http.MethodGet, base+"/api/v1/oauth/apps", nil)
+	oauthList.Header.Set("Authorization", "Bearer "+session.Token)
+	oauthList.Header.Set("X-Tracy-Workspace-ID", workspaceID)
+	oauthListResp, err := http.DefaultClient.Do(oauthList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oauthListResp.StatusCode != http.StatusOK {
+		t.Fatalf("OAuth apps status=%d", oauthListResp.StatusCode)
+	}
+	_ = oauthListResp.Body.Close()
+	keyBody, _ := json.Marshal(map[string]string{"name": "contract-session-key"})
+	create, _ := http.NewRequest(http.MethodPost, base+"/api/v1/workspaces/"+workspaceID+"/keys", bytes.NewReader(keyBody))
+	create.Header.Set("Authorization", "Bearer "+session.Token)
+	create.Header.Set("Content-Type", "application/json")
+	created, err := http.DefaultClient.Do(create)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer created.Body.Close()
+	if created.StatusCode != http.StatusCreated {
+		t.Fatalf("create workspace key status=%d", created.StatusCode)
+	}
+	var createdResponse struct {
 		APIKey struct {
-			ID        string `json:"id"`
-			ProjectID string `json:"project_id"`
-			Token     string `json:"token"`
+			ID    string `json:"id"`
+			Token string `json:"token"`
 		} `json:"api_key"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	if err := json.NewDecoder(created.Body).Decode(&createdResponse); err != nil {
 		t.Fatal(err)
 	}
-	if response.APIKey.ID == "" || response.APIKey.ProjectID == "" || response.APIKey.Token == "" {
-		t.Fatalf("incomplete key response: %+v", response)
+	if createdResponse.APIKey.ID == "" || createdResponse.APIKey.Token == "" {
+		t.Fatalf("plaintext key was not returned once: %+v", createdResponse)
 	}
-	getReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/projects/"+response.APIKey.ProjectID+"/keys", nil)
-	getReq.Header.Set("Authorization", "Bearer "+admin)
-	result, err := http.DefaultClient.Do(getReq)
+	ingestBody, _ := json.Marshal(map[string]any{"spans": []any{map[string]any{
+		"trace_id": "contract-key-trace", "span_id": "contract-key-span", "name": "contract-key",
+		"kind": "test", "start_time": "2026-01-01T00:00:00Z", "duration": 1000,
+	}}})
+	keyIngest, _ := http.NewRequest(http.MethodPost, base+"/api/v1/ingest", bytes.NewReader(ingestBody))
+	keyIngest.Header.Set("Authorization", "Bearer "+createdResponse.APIKey.Token)
+	keyIngest.Header.Set("Content-Type", "application/json")
+	keyIngestResp, err := http.DefaultClient.Do(keyIngest)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.StatusCode != http.StatusOK {
-		t.Fatalf("list keys status=%d", result.StatusCode)
+	if keyIngestResp.StatusCode != http.StatusAccepted {
+		t.Fatalf("created API key ingest status=%d", keyIngestResp.StatusCode)
 	}
-	_ = result.Body.Close()
-	revoke, _ := http.NewRequest(http.MethodPost, base+"/api/v1/keys/"+response.APIKey.ID+"/revoke", nil)
-	revoke.Header.Set("Authorization", "Bearer "+admin)
-	result, err = http.DefaultClient.Do(revoke)
+	_ = keyIngestResp.Body.Close()
+	list, _ := http.NewRequest(http.MethodGet, base+"/api/v1/workspaces/"+workspaceID+"/keys", nil)
+	list.Header.Set("Authorization", "Bearer "+session.Token)
+	listed, err := http.DefaultClient.Do(list)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.StatusCode != http.StatusOK {
-		t.Fatalf("revoke status=%d", result.StatusCode)
+	if listed.StatusCode != http.StatusOK {
+		t.Fatalf("list workspace keys status=%d", listed.StatusCode)
 	}
-	_ = result.Body.Close()
+	var listResponse struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(listed.Body).Decode(&listResponse); err != nil {
+		t.Fatal(err)
+	}
+	_ = listed.Body.Close()
+	for _, item := range listResponse.Items {
+		if _, exists := item["token"]; exists {
+			t.Fatal("list endpoint exposed plaintext token")
+		}
+	}
+	revoke, _ := http.NewRequest(http.MethodPost, base+"/api/v1/workspaces/"+workspaceID+"/keys/"+createdResponse.APIKey.ID+"/revoke", nil)
+	revoke.Header.Set("Authorization", "Bearer "+session.Token)
+	revoked, err := http.DefaultClient.Do(revoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revoked.StatusCode != http.StatusOK {
+		t.Fatalf("revoke workspace key status=%d", revoked.StatusCode)
+	}
+	_ = revoked.Body.Close()
+	revokedIngest, _ := http.NewRequest(http.MethodPost, base+"/api/v1/ingest", bytes.NewReader(ingestBody))
+	revokedIngest.Header.Set("Authorization", "Bearer "+createdResponse.APIKey.Token)
+	revokedIngest.Header.Set("Content-Type", "application/json")
+	revokedIngestResp, err := http.DefaultClient.Do(revokedIngest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if revokedIngestResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked API key ingest status=%d", revokedIngestResp.StatusCode)
+	}
+	_ = revokedIngestResp.Body.Close()
+	wrongWorkspaceRevoke, _ := http.NewRequest(http.MethodPost, base+"/api/v1/workspaces/workspace-does-not-exist/keys/"+createdResponse.APIKey.ID+"/revoke", nil)
+	wrongWorkspaceRevoke.Header.Set("Authorization", "Bearer "+session.Token)
+	wrongWorkspaceRevokeResp, err := http.DefaultClient.Do(wrongWorkspaceRevoke)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wrongWorkspaceRevokeResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-workspace revoke status=%d", wrongWorkspaceRevokeResp.StatusCode)
+	}
+	_ = wrongWorkspaceRevokeResp.Body.Close()
 }

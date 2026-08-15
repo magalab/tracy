@@ -46,6 +46,15 @@ function toDateTimeString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function formatTraceDuration(milliseconds: number) {
+  if (milliseconds < 1) return "<1ms";
+  if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`;
+  if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)}s`;
+  const minutes = Math.floor(milliseconds / 60_000);
+  const seconds = Math.floor((milliseconds % 60_000) / 1_000);
+  return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+}
+
 export function TraceList({
   traces,
   selectedID,
@@ -112,7 +121,9 @@ export function TraceList({
       key: "duration",
       align: "right" as const,
       render: (_: unknown, trace: TraceSummary) =>
-        `${(new Date(trace.end_time).getTime() - new Date(trace.start_time).getTime()).toFixed(0)}ms`,
+        formatTraceDuration(
+          new Date(trace.end_time).getTime() - new Date(trace.start_time).getTime(),
+        ),
     },
   ];
   return (
@@ -194,7 +205,7 @@ export function TraceList({
       )}
       {!token && (
         <div className="empty">
-          <strong>{t("connectProject")}</strong>
+          <strong>{t("connectWorkspace")}</strong>
           <p>{t("connectHint")}</p>
         </div>
       )}
@@ -220,6 +231,7 @@ export function TraceList({
           empty={<Empty description={t("noTracesMatch")} />}
           pagination={false}
           rowKey="trace_id"
+          size="small"
           onRow={(trace) =>
             trace
               ? {

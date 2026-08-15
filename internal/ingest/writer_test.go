@@ -37,7 +37,7 @@ func TestEnqueueRejectsWholeBatchWhenFull(t *testing.T) {
 	store := &fakeStore{}
 	writer := NewWriterWithBytes(store, 2, time.Hour, 2, 400)
 	defer writer.Close(context.Background())
-	span := domain.Span{ProjectID: "p", TraceID: "t", SpanID: "s", Name: "n"}
+	span := domain.Span{WorkspaceID: "p", TraceID: "t", SpanID: "s", Name: "n"}
 	if err := writer.Enqueue([]domain.Span{span}); err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +54,7 @@ func TestWriterReportsWriteFailure(t *testing.T) {
 	store := &fakeStore{fail: true}
 	writer := NewWriter(store, 1, time.Hour, 2)
 	defer writer.Close(context.Background())
-	span := domain.Span{ProjectID: "p", TraceID: "t", SpanID: "s", Name: "n"}
+	span := domain.Span{WorkspaceID: "p", TraceID: "t", SpanID: "s", Name: "n"}
 	if err := writer.Enqueue([]domain.Span{span}); err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestEnqueueRejectsAfterClose(t *testing.T) {
 	if err := writer.Close(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	span := domain.Span{ProjectID: "p", TraceID: "t", SpanID: "s", Name: "n"}
+	span := domain.Span{WorkspaceID: "p", TraceID: "t", SpanID: "s", Name: "n"}
 	if err := writer.Enqueue([]domain.Span{span}); !errors.Is(err, ErrClosed) {
 		t.Fatalf("error=%v", err)
 	}
@@ -82,7 +82,7 @@ func TestEnqueueRejectsAfterClose(t *testing.T) {
 func TestEnqueueRejectsWhenByteBudgetIsFull(t *testing.T) {
 	writer := NewWriterWithBytes(&fakeStore{}, 1, time.Hour, 2, 100)
 	defer writer.Close(context.Background())
-	span := domain.Span{ProjectID: "p", TraceID: "t", SpanID: "s", Name: "n", Input: "this payload is larger than the budget"}
+	span := domain.Span{WorkspaceID: "p", TraceID: "t", SpanID: "s", Name: "n", Input: "this payload is larger than the budget"}
 	if err := writer.Enqueue([]domain.Span{span}); !errors.Is(err, ErrFull) {
 		t.Fatalf("error=%v", err)
 	}

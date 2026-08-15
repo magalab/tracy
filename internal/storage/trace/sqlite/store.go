@@ -27,7 +27,7 @@ const (
 
 func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 func (s *Store) Migrate(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS spans (project_id TEXT NOT NULL, trace_id TEXT NOT NULL, span_id TEXT NOT NULL, parent_span_id TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, span_kind TEXT NOT NULL DEFAULT '', start_time INTEGER NOT NULL, received_at INTEGER NOT NULL, duration INTEGER NOT NULL, status TEXT NOT NULL DEFAULT '', status_message TEXT NOT NULL DEFAULT '', input TEXT NOT NULL DEFAULT '', output TEXT NOT NULL DEFAULT '', input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, attributes_json TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(project_id,trace_id,span_id)); CREATE INDEX IF NOT EXISTS idx_spans_project_start ON spans(project_id,start_time); CREATE INDEX IF NOT EXISTS idx_spans_project_trace ON spans(project_id,trace_id); CREATE INDEX IF NOT EXISTS idx_spans_project_kind_start ON spans(project_id,span_kind,start_time); CREATE TABLE IF NOT EXISTS trace_summaries (project_id TEXT NOT NULL, trace_id TEXT NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER NOT NULL, span_count INTEGER NOT NULL, status TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, PRIMARY KEY(project_id,trace_id)); CREATE INDEX IF NOT EXISTS idx_trace_summaries_project_start ON trace_summaries(project_id,start_time,trace_id); CREATE INDEX IF NOT EXISTS idx_trace_summaries_project_status ON trace_summaries(project_id,status,start_time,trace_id);`)
+	_, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS spans (workspace_id TEXT NOT NULL, trace_id TEXT NOT NULL, span_id TEXT NOT NULL, parent_span_id TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, span_kind TEXT NOT NULL DEFAULT '', start_time INTEGER NOT NULL, received_at INTEGER NOT NULL, duration INTEGER NOT NULL, status TEXT NOT NULL DEFAULT '', status_message TEXT NOT NULL DEFAULT '', input TEXT NOT NULL DEFAULT '', output TEXT NOT NULL DEFAULT '', input_tokens INTEGER NOT NULL DEFAULT 0, output_tokens INTEGER NOT NULL DEFAULT 0, attributes_json TEXT NOT NULL DEFAULT '{}', PRIMARY KEY(workspace_id,trace_id,span_id)); CREATE INDEX IF NOT EXISTS idx_spans_workspace_start ON spans(workspace_id,start_time); CREATE INDEX IF NOT EXISTS idx_spans_workspace_trace ON spans(workspace_id,trace_id); CREATE INDEX IF NOT EXISTS idx_spans_workspace_kind_start ON spans(workspace_id,span_kind,start_time); CREATE TABLE IF NOT EXISTS trace_summaries (workspace_id TEXT NOT NULL, trace_id TEXT NOT NULL, start_time INTEGER NOT NULL, end_time INTEGER NOT NULL, span_count INTEGER NOT NULL, status TEXT NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, PRIMARY KEY(workspace_id,trace_id)); CREATE INDEX IF NOT EXISTS idx_trace_summaries_workspace_start ON trace_summaries(workspace_id,start_time,trace_id); CREATE INDEX IF NOT EXISTS idx_trace_summaries_workspace_status ON trace_summaries(workspace_id,status,start_time,trace_id);`)
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return err
 	}
 	if summaryCount == 0 {
-		_, err = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO trace_summaries(project_id,trace_id,start_time,end_time,span_count,status,input_tokens,output_tokens) SELECT project_id,trace_id,MIN(start_time),MAX(start_time + duration / 1000),COUNT(*),CASE WHEN SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) > 0 THEN 'error' ELSE 'ok' END,COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0) FROM spans GROUP BY project_id,trace_id`)
+		_, err = s.db.ExecContext(ctx, `INSERT OR REPLACE INTO trace_summaries(workspace_id,trace_id,start_time,end_time,span_count,status,input_tokens,output_tokens) SELECT workspace_id,trace_id,MIN(start_time),MAX(start_time + duration / 1000),COUNT(*),CASE WHEN SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) > 0 THEN 'error' ELSE 'ok' END,COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0) FROM spans GROUP BY workspace_id,trace_id`)
 	}
 	return err
 }
@@ -49,38 +49,38 @@ func (s *Store) Append(ctx context.Context, spans []domain.Span) error {
 		return err
 	}
 	defer tx.Rollback()
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO spans(project_id,trace_id,span_id,parent_span_id,name,span_kind,start_time,received_at,duration,status,status_message,input,output,input_tokens,output_tokens,attributes_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(project_id,trace_id,span_id) DO UPDATE SET parent_span_id=excluded.parent_span_id,name=excluded.name,span_kind=excluded.span_kind,start_time=excluded.start_time,received_at=excluded.received_at,duration=excluded.duration,status=excluded.status,status_message=excluded.status_message,input=excluded.input,output=excluded.output,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens,attributes_json=excluded.attributes_json`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO spans(workspace_id,trace_id,span_id,parent_span_id,name,span_kind,start_time,received_at,duration,status,status_message,input,output,input_tokens,output_tokens,attributes_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(workspace_id,trace_id,span_id) DO UPDATE SET parent_span_id=excluded.parent_span_id,name=excluded.name,span_kind=excluded.span_kind,start_time=excluded.start_time,received_at=excluded.received_at,duration=excluded.duration,status=excluded.status,status_message=excluded.status_message,input=excluded.input,output=excluded.output,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens,attributes_json=excluded.attributes_json`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, sp := range spans {
 		attrs, _ := json.Marshal(sp.Attributes)
-		if _, err = stmt.ExecContext(ctx, sp.ProjectID, sp.TraceID, sp.SpanID, sp.ParentSpanID, sp.Name, sp.Kind, sp.StartTime.UTC().UnixMicro(), sp.ReceivedAt.UTC().UnixMicro(), sp.Duration.Nanoseconds(), sp.Status, sp.StatusMessage, sp.Input, sp.Output, sp.InputTokens, sp.OutputTokens, string(attrs)); err != nil {
+		if _, err = stmt.ExecContext(ctx, sp.WorkspaceID, sp.TraceID, sp.SpanID, sp.ParentSpanID, sp.Name, sp.Kind, sp.StartTime.UTC().UnixMicro(), sp.ReceivedAt.UTC().UnixMicro(), sp.Duration.Nanoseconds(), sp.Status, sp.StatusMessage, sp.Input, sp.Output, sp.InputTokens, sp.OutputTokens, string(attrs)); err != nil {
 			return err
 		}
 	}
-	type traceKey struct{ projectID, traceID string }
+	type traceKey struct{ workspaceID, traceID string }
 	traceIDs := make(map[traceKey]struct{}, len(spans))
 	for _, sp := range spans {
-		traceIDs[traceKey{projectID: sp.ProjectID, traceID: sp.TraceID}] = struct{}{}
+		traceIDs[traceKey{workspaceID: sp.WorkspaceID, traceID: sp.TraceID}] = struct{}{}
 	}
 	for key := range traceIDs {
-		if _, err = tx.ExecContext(ctx, `INSERT INTO trace_summaries(project_id,trace_id,start_time,end_time,span_count,status,input_tokens,output_tokens) SELECT project_id,trace_id,MIN(start_time),MAX(start_time + duration / 1000),COUNT(*),CASE WHEN SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) > 0 THEN 'error' ELSE 'ok' END,COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0) FROM spans WHERE project_id=? AND trace_id=? GROUP BY project_id,trace_id ON CONFLICT(project_id,trace_id) DO UPDATE SET start_time=excluded.start_time,end_time=excluded.end_time,span_count=excluded.span_count,status=excluded.status,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens`, key.projectID, key.traceID); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO trace_summaries(workspace_id,trace_id,start_time,end_time,span_count,status,input_tokens,output_tokens) SELECT workspace_id,trace_id,MIN(start_time),MAX(start_time + duration / 1000),COUNT(*),CASE WHEN SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) > 0 THEN 'error' ELSE 'ok' END,COALESCE(SUM(input_tokens),0),COALESCE(SUM(output_tokens),0) FROM spans WHERE workspace_id=? AND trace_id=? GROUP BY workspace_id,trace_id ON CONFLICT(workspace_id,trace_id) DO UPDATE SET start_time=excluded.start_time,end_time=excluded.end_time,span_count=excluded.span_count,status=excluded.status,input_tokens=excluded.input_tokens,output_tokens=excluded.output_tokens`, key.workspaceID, key.traceID); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
 }
-func (s *Store) GetTrace(ctx context.Context, projectID, traceID string) ([]domain.Span, error) {
+func (s *Store) GetTrace(ctx context.Context, workspaceID, traceID string) ([]domain.Span, error) {
 	var spanCount, payloadBytes int64
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(input AS BLOB))+LENGTH(CAST(output AS BLOB))+LENGTH(CAST(attributes_json AS BLOB))),0) FROM spans WHERE project_id=? AND trace_id=?`, projectID, traceID).Scan(&spanCount, &payloadBytes); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(LENGTH(CAST(input AS BLOB))+LENGTH(CAST(output AS BLOB))+LENGTH(CAST(attributes_json AS BLOB))),0) FROM spans WHERE workspace_id=? AND trace_id=?`, workspaceID, traceID).Scan(&spanCount, &payloadBytes); err != nil {
 		return nil, err
 	}
 	if spanCount > maxTraceSpans || payloadBytes > maxTracePayloadSize {
 		return nil, tracestore.ErrTooLarge
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT project_id,trace_id,span_id,parent_span_id,name,span_kind,start_time,received_at,duration,status,status_message,input,output,input_tokens,output_tokens,attributes_json FROM spans WHERE project_id=? AND trace_id=? ORDER BY start_time,span_id`, projectID, traceID)
+	rows, err := s.db.QueryContext(ctx, `SELECT workspace_id,trace_id,span_id,parent_span_id,name,span_kind,start_time,received_at,duration,status,status_message,input,output,input_tokens,output_tokens,attributes_json FROM spans WHERE workspace_id=? AND trace_id=? ORDER BY start_time,span_id`, workspaceID, traceID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (s *Store) GetTrace(ctx context.Context, projectID, traceID string) ([]doma
 		var sp domain.Span
 		var start, received, duration int64
 		var attrs string
-		if err = rows.Scan(&sp.ProjectID, &sp.TraceID, &sp.SpanID, &sp.ParentSpanID, &sp.Name, &sp.Kind, &start, &received, &duration, &sp.Status, &sp.StatusMessage, &sp.Input, &sp.Output, &sp.InputTokens, &sp.OutputTokens, &attrs); err != nil {
+		if err = rows.Scan(&sp.WorkspaceID, &sp.TraceID, &sp.SpanID, &sp.ParentSpanID, &sp.Name, &sp.Kind, &start, &received, &duration, &sp.Status, &sp.StatusMessage, &sp.Input, &sp.Output, &sp.InputTokens, &sp.OutputTokens, &attrs); err != nil {
 			return nil, err
 		}
 		sp.StartTime = time.UnixMicro(start).UTC()
@@ -105,12 +105,12 @@ func (s *Store) GetTrace(ctx context.Context, projectID, traceID string) ([]doma
 	return result, nil
 }
 
-func (s *Store) GetTracePage(ctx context.Context, projectID, traceID, cursor string, limit int) (tracestore.TracePage, error) {
+func (s *Store) GetTracePage(ctx context.Context, workspaceID, traceID, cursor string, limit int) (tracestore.TracePage, error) {
 	if limit < 1 || limit > 1000 {
 		limit = 100
 	}
-	args := []any{projectID, traceID}
-	where := "project_id=? AND trace_id=?"
+	args := []any{workspaceID, traceID}
+	where := "workspace_id=? AND trace_id=?"
 	if cursor != "" {
 		start, spanID, err := decodeCursor(cursor)
 		if err != nil {
@@ -120,7 +120,7 @@ func (s *Store) GetTracePage(ctx context.Context, projectID, traceID, cursor str
 		args = append(args, start, start, spanID)
 	}
 	args = append(args, limit+1)
-	rows, err := s.db.QueryContext(ctx, `SELECT project_id,trace_id,span_id,parent_span_id,name,span_kind,start_time,received_at,duration,status,status_message,input,output,input_tokens,output_tokens,attributes_json FROM spans WHERE `+where+` ORDER BY start_time,span_id LIMIT ?`, args...)
+	rows, err := s.db.QueryContext(ctx, `SELECT workspace_id,trace_id,span_id,parent_span_id,name,span_kind,start_time,received_at,duration,status,status_message,input,output,input_tokens,output_tokens,attributes_json FROM spans WHERE `+where+` ORDER BY start_time,span_id LIMIT ?`, args...)
 	if err != nil {
 		return tracestore.TracePage{}, err
 	}
@@ -130,7 +130,7 @@ func (s *Store) GetTracePage(ctx context.Context, projectID, traceID, cursor str
 		var sp domain.Span
 		var start, received, duration int64
 		var attrs string
-		if err := rows.Scan(&sp.ProjectID, &sp.TraceID, &sp.SpanID, &sp.ParentSpanID, &sp.Name, &sp.Kind, &start, &received, &duration, &sp.Status, &sp.StatusMessage, &sp.Input, &sp.Output, &sp.InputTokens, &sp.OutputTokens, &attrs); err != nil {
+		if err := rows.Scan(&sp.WorkspaceID, &sp.TraceID, &sp.SpanID, &sp.ParentSpanID, &sp.Name, &sp.Kind, &start, &received, &duration, &sp.Status, &sp.StatusMessage, &sp.Input, &sp.Output, &sp.InputTokens, &sp.OutputTokens, &attrs); err != nil {
 			return tracestore.TracePage{}, err
 		}
 		sp.StartTime, sp.ReceivedAt, sp.Duration = time.UnixMicro(start).UTC(), time.UnixMicro(received).UTC(), time.Duration(duration)
@@ -153,18 +153,18 @@ func (s *Store) ListTraces(ctx context.Context, q domain.Query) (domain.Page, er
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	where := []string{"project_id = ?"}
-	args := []any{q.ProjectID}
+	where := []string{"workspace_id = ?"}
+	args := []any{q.WorkspaceID}
 	if q.Status != "" {
 		where = append(where, "status = ?")
 		args = append(args, q.Status)
 	}
 	if q.Kind != "" {
-		where = append(where, "EXISTS (SELECT 1 FROM spans s_kind WHERE s_kind.project_id=trace_summaries.project_id AND s_kind.trace_id=trace_summaries.trace_id AND s_kind.span_kind=?)")
+		where = append(where, "EXISTS (SELECT 1 FROM spans s_kind WHERE s_kind.workspace_id=trace_summaries.workspace_id AND s_kind.trace_id=trace_summaries.trace_id AND s_kind.span_kind=?)")
 		args = append(args, q.Kind)
 	}
 	if q.Name != "" {
-		where = append(where, "EXISTS (SELECT 1 FROM spans s_name WHERE s_name.project_id=trace_summaries.project_id AND s_name.trace_id=trace_summaries.trace_id AND s_name.name=?)")
+		where = append(where, "EXISTS (SELECT 1 FROM spans s_name WHERE s_name.workspace_id=trace_summaries.workspace_id AND s_name.trace_id=trace_summaries.trace_id AND s_name.name=?)")
 		args = append(args, q.Name)
 	}
 	if q.TraceID != "" {
@@ -223,7 +223,7 @@ func (s *Store) ListTraces(ctx context.Context, q domain.Query) (domain.Page, er
 		if end.Valid {
 			item.EndTime = time.UnixMicro(end.Int64).UTC()
 		}
-		item.ProjectID = q.ProjectID
+		item.WorkspaceID = q.WorkspaceID
 		page.Items = append(page.Items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -249,9 +249,9 @@ func (s *Store) Metrics(ctx context.Context, q domain.MetricsQuery) (domain.Metr
 	if end.Before(start) {
 		return domain.Metrics{}, fmt.Errorf("end_time must be after start_time")
 	}
-	metrics := domain.Metrics{ProjectID: q.ProjectID, StartTime: start.UTC(), EndTime: end.UTC(), UsageBreakdown: make([]domain.UsageBreakdown, 0)}
+	metrics := domain.Metrics{WorkspaceID: q.WorkspaceID, StartTime: start.UTC(), EndTime: end.UTC(), UsageBreakdown: make([]domain.UsageBreakdown, 0)}
 	var requestCount, errorCount, inputTokens, outputTokens int64
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='error' THEN 1 ELSE 0 END),0), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0) FROM trace_summaries WHERE project_id=? AND start_time>=? AND start_time<=?`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro()).Scan(&requestCount, &errorCount, &inputTokens, &outputTokens); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='error' THEN 1 ELSE 0 END),0), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0) FROM trace_summaries WHERE workspace_id=? AND start_time>=? AND start_time<=?`, q.WorkspaceID, start.UTC().UnixMicro(), end.UTC().UnixMicro()).Scan(&requestCount, &errorCount, &inputTokens, &outputTokens); err != nil {
 		return domain.Metrics{}, err
 	}
 	metrics.RequestCount, metrics.ErrorCount = requestCount, errorCount
@@ -259,7 +259,7 @@ func (s *Store) Metrics(ctx context.Context, q domain.MetricsQuery) (domain.Metr
 	if requestCount > 0 {
 		metrics.ErrorRate = float64(errorCount) / float64(requestCount)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT end_time - start_time FROM trace_summaries WHERE project_id=? AND start_time>=? AND start_time<=?`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro())
+	rows, err := s.db.QueryContext(ctx, `SELECT end_time - start_time FROM trace_summaries WHERE workspace_id=? AND start_time>=? AND start_time<=?`, q.WorkspaceID, start.UTC().UnixMicro(), end.UTC().UnixMicro())
 	if err != nil {
 		return domain.Metrics{}, err
 	}
@@ -297,7 +297,7 @@ func (s *Store) Metrics(ctx context.Context, q domain.MetricsQuery) (domain.Metr
 		metrics.P95LatencyMS = percentile(latencies, 0.95)
 		metrics.P99LatencyMS = percentile(latencies, 0.99)
 	}
-	usageRows, err := s.db.QueryContext(ctx, `SELECT span_kind, COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0) FROM spans WHERE project_id=? AND start_time>=? AND start_time<=? GROUP BY span_kind ORDER BY COUNT(*) DESC, span_kind LIMIT 20`, q.ProjectID, start.UTC().UnixMicro(), end.UTC().UnixMicro())
+	usageRows, err := s.db.QueryContext(ctx, `SELECT span_kind, COUNT(*), COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0) FROM spans WHERE workspace_id=? AND start_time>=? AND start_time<=? GROUP BY span_kind ORDER BY COUNT(*) DESC, span_kind LIMIT 20`, q.WorkspaceID, start.UTC().UnixMicro(), end.UTC().UnixMicro())
 	if err != nil {
 		return domain.Metrics{}, err
 	}

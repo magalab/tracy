@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Tracy API
-  version: 0.1.0
+  version: 0.2.0
   description: Self-hosted LLM and agent trace observability API.
 servers:
   - url: http://localhost:8080
@@ -48,7 +48,22 @@ paths:
       operationId: currentUser
       responses:
         '200':
-          description: Current user and active Workspace.
+          description: Current user. The response does not contain an active workspace; workspace selection is client-side state and is sent through X-Tracy-Workspace-ID for workspace-scoped requests.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [user, auth_type]
+                    properties:
+                      user: { $ref: '#/components/schemas/User' }
+                      auth_type: { type: string, enum: [session] }
+                  - type: object
+                    required: [user, workspace_id, auth_type]
+                    properties:
+                      user: { type: object, nullable: true }
+                      workspace_id: { type: string }
+                      auth_type: { type: string, enum: [api_key] }
         '401':
           $ref: '#/components/responses/Unauthorized'
   /api/v1/auth/logout:
@@ -62,9 +77,19 @@ paths:
   /api/v1/workspaces:
     get:
       operationId: listWorkspaces
+      description: Workspaces available to the current user; selection is client-side state.
       responses:
         '200':
           description: Workspaces available to the current user.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Workspace' }
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
@@ -80,7 +105,14 @@ paths:
                 name: { type: string, maxLength: 128 }
       responses:
         '201':
-          description: Workspace created and activated for the current session.
+          description: Workspace created; the client may select it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace]
+                properties:
+                  workspace: { $ref: '#/components/schemas/Workspace' }
         '401':
           $ref: '#/components/responses/Unauthorized'
   /api/v1/workspaces/{workspaceID}/switch:
@@ -93,14 +125,97 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          description: Workspace activated for the current session.
+          description: Workspace access validated for client-side selection.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace]
+                properties:
+                  workspace: { $ref: '#/components/schemas/Workspace' }
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           description: User is not a member of the workspace.
+  /api/v1/workspaces/{workspaceID}/keys:
+    parameters:
+      - name: workspaceID
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: listUserWorkspaceKeys
+      description: Lists keys for a workspace; workspace owners only.
+      responses:
+        '200':
+          description: Workspace API keys without plaintext tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/APIKey' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Workspace owner required. }
+    post:
+      operationId: createUserWorkspaceKey
+      description: Creates a workspace API key; workspace owners only. Plaintext is returned once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                expires_at: { type: string, format: date-time }
+      responses:
+        '201':
+          description: API key created; plaintext token is returned once.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [api_key]
+                properties:
+                  api_key: { $ref: '#/components/schemas/CreatedAPIKey' }
+        '400': { description: Invalid key name or expiration. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Workspace owner required. }
+  /api/v1/workspaces/{workspaceID}/keys/{keyID}/revoke:
+    post:
+      operationId: revokeUserWorkspaceKey
+      description: Revokes a workspace API key; workspace owners only.
+      parameters:
+        - name: workspaceID
+          in: path
+          required: true
+          schema: { type: string }
+        - name: keyID
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: API key revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked]
+                properties:
+                  revoked: { type: boolean, enum: [true] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Workspace owner required. }
+        '404': { description: API key not found in workspace. }
   /api/v1/ingest:
     post:
       operationId: ingestSpans
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceContext'
       requestBody:
         required: true
         content:
@@ -125,6 +240,8 @@ paths:
     post:
       operationId: ingestCozeLoopSpans
       description: CozeLoop-compatible trace upload endpoint.
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceContext'
       requestBody:
         required: true
         content:
@@ -147,6 +264,7 @@ paths:
     get:
       operationId: listTraces
       parameters:
+        - $ref: '#/components/parameters/WorkspaceContext'
         - $ref: '#/components/parameters/Status'
         - $ref: '#/components/parameters/Kind'
         - $ref: '#/components/parameters/Name'
@@ -169,7 +287,7 @@ paths:
           schema: { type: integer, minimum: 0 }
       responses:
         '200':
-          description: Current project's trace summaries.
+          description: Current workspace's trace summaries.
           content:
             application/json:
               schema:
@@ -181,6 +299,7 @@ paths:
       operationId: getTrace
       description: Returns a paginated trace. Use next_cursor to read large traces without loading the entire trace into one response.
       parameters:
+        - $ref: '#/components/parameters/WorkspaceContext'
         - $ref: '#/components/parameters/TracePathID'
         - name: limit
           in: query
@@ -210,11 +329,12 @@ paths:
     get:
       operationId: dashboard
       parameters:
+        - $ref: '#/components/parameters/WorkspaceContext'
         - $ref: '#/components/parameters/StartTime'
         - $ref: '#/components/parameters/EndTime'
       responses:
         '200':
-          description: Current project's metrics, defaulting to the last 24 hours.
+          description: Current workspace's metrics, defaulting to the last 24 hours.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DashboardMetrics' }
@@ -223,96 +343,38 @@ paths:
   /api/v1/ingest/stats:
     get:
       operationId: ingestStats
-      description: Admin-only writer and queue metrics.
+      description: Process-wide writer and queue metrics. A Workspace Owner must provide X-Tracy-Workspace-ID for access control; the returned counters are not filtered by Workspace.
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceContext'
       responses:
         '200': { description: Ingest statistics. }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-  /api/v1/projects:
-    get:
-      operationId: listProjects
-      description: Admin-only project list.
-      responses:
-        '200': { description: Projects. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-    post:
-      operationId: createProject
-      description: Creates a project and returns its initial API key once.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name: { type: string, maxLength: 128 }
-                key_name: { type: string }
-      responses:
-        '201': { description: Project and initial API key created. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-  /api/v1/projects/{projectID}/keys:
-    parameters:
-      - name: projectID
-        in: path
-        required: true
-        schema: { type: string }
-    get:
-      operationId: listProjectKeys
-      responses:
-        '200': { description: Project API keys without plaintext tokens. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-    post:
-      operationId: createProjectKey
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name: { type: string }
-                expires_at: { type: string, format: date-time }
-      responses:
-        '201': { description: API key created; plaintext token is returned once. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-  /api/v1/keys/{keyID}/revoke:
-    post:
-      operationId: revokeAPIKey
-      parameters:
-        - name: keyID
-          in: path
-          required: true
-          schema: { type: string }
-      responses:
-        '200': { description: API key revoked. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { description: API key not found. }
   /api/v1/oauth/apps:
     get:
       operationId: listOAuthApps
-      description: Admin-only OAuth App list.
+      description: Workspace Owner OAuth App list.
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceContext'
       responses:
         '200': { description: OAuth Apps. }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createOAuthApp
-      description: Registers an RSA public key for a CozeLoop JWT OAuth client.
+      description: Registers an RSA public key for a CozeLoop JWT OAuth client; Workspace Owner required.
+      parameters:
+        - $ref: '#/components/parameters/WorkspaceContext'
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [client_id, project_id, public_key_id, public_key]
+              required: [client_id, workspace_id, public_key_id, public_key]
               properties:
                 client_id: { type: string }
-                project_id: { type: string }
+                workspace_id: { type: string }
                 public_key_id: { type: string }
                 public_key: { type: string, description: RSA PEM public key }
                 enabled: { type: boolean, default: true }
@@ -342,7 +404,7 @@ paths:
                 duration_seconds: { type: integer, minimum: 0, maximum: 86400, default: 900, description: Omit or set to 0 for the default 900 seconds; explicit values must be between 60 and 86400. }
       responses:
         '200':
-          description: Short-lived project-scoped access token.
+          description: Short-lived workspace-scoped access token.
           content:
             application/json:
               schema:
@@ -360,6 +422,12 @@ components:
       type: http
       scheme: bearer
   parameters:
+    WorkspaceContext:
+      name: X-Tracy-Workspace-ID
+      in: header
+      required: false
+      description: Required for user sessions; API keys use their bound workspace.
+      schema: { type: string }
     TracePathID:
       name: traceID
       in: path
@@ -409,7 +477,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
-      description: Admin API key required.
+      description: The current user lacks the required Workspace permission.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -427,6 +495,39 @@ components:
           properties:
             code: { type: string }
             message: { type: string }
+    User:
+      type: object
+      required: [id, email, name]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        name: { type: string }
+    Workspace:
+      type: object
+      required: [id, name, created_at, updated_at]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    APIKey:
+      type: object
+      required: [id, workspace_id, name, role, revoked]
+      properties:
+        id: { type: string }
+        workspace_id: { type: string }
+        name: { type: string }
+        role: { type: string }
+        expires_at: { type: string, format: date-time }
+        revoked: { type: boolean }
+        last_used_at: { type: string, format: date-time }
+    CreatedAPIKey:
+      allOf:
+        - $ref: '#/components/schemas/APIKey'
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string }
     SpanInput:
       type: object
       required: [trace_id, span_id, name, start_time]
@@ -451,12 +552,12 @@ components:
         - $ref: '#/components/schemas/SpanInput'
         - type: object
           properties:
-            project_id: { type: string }
+            workspace_id: { type: string }
     TraceSummary:
       type: object
-      required: [project_id, trace_id, start_time, end_time, span_count, status]
+      required: [workspace_id, trace_id, start_time, end_time, span_count, status]
       properties:
-        project_id: { type: string }
+        workspace_id: { type: string }
         trace_id: { type: string }
         start_time: { type: string, format: date-time }
         end_time: { type: string, format: date-time }
@@ -474,7 +575,7 @@ components:
     DashboardMetrics:
       type: object
       properties:
-        project_id: { type: string }
+        workspace_id: { type: string }
         start_time: { type: string, format: date-time }
         end_time: { type: string, format: date-time }
         request_count: { type: integer, format: int64 }

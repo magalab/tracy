@@ -74,9 +74,8 @@ func main() {
 	<-cleanupDone
 }
 func ensureDefault(ctx context.Context, s *meta.Store, logger *slog.Logger) {
-	_, err := s.Project(ctx, "default")
+	_, err := s.Workspace(ctx, "default")
 	if err == nil {
-		must(logger, s.EnsureAdmin(ctx, "default-key"))
 		ensureDefaultUser(ctx, s, logger)
 		return
 	}
@@ -84,15 +83,7 @@ func ensureDefault(ctx context.Context, s *meta.Store, logger *slog.Logger) {
 		must(logger, err)
 	}
 	now := time.Now().UTC()
-	must(logger, s.CreateProject(ctx, meta.Project{ID: "default", Name: "Default Project", CreatedAt: now, UpdatedAt: now}))
-	token := os.Getenv("TRACY_API_KEY")
-	if token == "" {
-		var b [24]byte
-		must(logger, func() error { _, e := rand.Read(b[:]); return e }())
-		token = "tr_" + hex.EncodeToString(b[:])
-		logger.Info("created initial API key; store it securely", "api_key", token)
-	}
-	must(logger, s.CreateAPIKey(ctx, meta.APIKey{ID: "default-key", ProjectID: "default", Name: "Default API Key", Role: "admin", TokenHash: meta.HashToken(token)}))
+	must(logger, s.CreateWorkspace(ctx, meta.Workspace{ID: "default", Name: "Default Workspace", CreatedAt: now, UpdatedAt: now}))
 	ensureDefaultUser(ctx, s, logger)
 }
 

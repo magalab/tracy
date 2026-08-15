@@ -67,7 +67,7 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusInternalServerError, "server_error", "could not issue access token")
 		return
 	}
-	if err := s.meta.CreateOAuthAccessToken(r.Context(), meta.HashToken(accessToken), app.ProjectID, now.Add(time.Duration(duration)*time.Second), now); err != nil {
+	if err := s.meta.CreateOAuthAccessToken(r.Context(), meta.HashToken(accessToken), app.WorkspaceID, now.Add(time.Duration(duration)*time.Second), now); err != nil {
 		oauthError(w, http.StatusInternalServerError, "server_error", "could not persist access token")
 		return
 	}
@@ -75,10 +75,11 @@ func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listOAuthApps(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
+	_, workspaceID, ok := s.requireWorkspaceOwnerForHeaderValue(w, r)
+	if !ok {
 		return
 	}
-	apps, err := s.meta.ListOAuthApps(r.Context())
+	apps, err := s.meta.ListOAuthAppsByWorkspace(r.Context(), workspaceID)
 	if err != nil {
 		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list OAuth apps")
 		return
@@ -87,12 +88,13 @@ func (s *Server) listOAuthApps(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) createOAuthApp(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
+	_, workspaceID, ok := s.requireWorkspaceOwnerForHeaderValue(w, r)
+	if !ok {
 		return
 	}
 	var body struct {
 		ClientID    string `json:"client_id"`
-		ProjectID   string `json:"project_id"`
+		WorkspaceID string `json:"workspace_id"`
 		PublicKeyID string `json:"public_key_id"`
 		PublicKey   string `json:"public_key"`
 		Enabled     *bool  `json:"enabled"`
@@ -102,14 +104,18 @@ func (s *Server) createOAuthApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.ClientID = strings.TrimSpace(body.ClientID)
-	body.ProjectID = strings.TrimSpace(body.ProjectID)
+	body.WorkspaceID = strings.TrimSpace(body.WorkspaceID)
 	body.PublicKeyID = strings.TrimSpace(body.PublicKeyID)
-	if body.ClientID == "" || len(body.ClientID) > 256 || body.ProjectID == "" || body.PublicKeyID == "" || len(body.PublicKeyID) > 256 || len(body.PublicKey) > 128<<10 {
-		errorJSON(w, http.StatusBadRequest, "invalid_oauth_app", "client_id, project_id, public_key_id and public_key are required")
+	if body.ClientID == "" || len(body.ClientID) > 256 || body.WorkspaceID == "" || body.PublicKeyID == "" || len(body.PublicKeyID) > 256 || len(body.PublicKey) > 128<<10 {
+		errorJSON(w, http.StatusBadRequest, "invalid_oauth_app", "client_id, workspace_id, public_key_id and public_key are required")
 		return
 	}
-	if _, err := s.meta.Project(r.Context(), body.ProjectID); err != nil {
-		errorJSON(w, http.StatusBadRequest, "invalid_project", "project was not found")
+	if body.WorkspaceID != workspaceID {
+		errorJSON(w, http.StatusForbidden, "workspace_forbidden", "OAuth app must belong to the selected workspace")
+		return
+	}
+	if _, err := s.meta.Workspace(r.Context(), body.WorkspaceID); err != nil {
+		errorJSON(w, http.StatusBadRequest, "invalid_workspace", "workspace was not found")
 		return
 	}
 	if _, err := parseRSAPublicKey(body.PublicKey); err != nil {
@@ -126,7 +132,7 @@ func (s *Server) createOAuthApp(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusInternalServerError, "id_generation_failed", "could not generate OAuth app id")
 		return
 	}
-	app := meta.OAuthApp{ID: id, ClientID: body.ClientID, ProjectID: body.ProjectID, PublicKeyID: body.PublicKeyID, PublicKey: body.PublicKey, Enabled: enabled, CreatedAt: now, UpdatedAt: now}
+	app := meta.OAuthApp{ID: id, ClientID: body.ClientID, WorkspaceID: body.WorkspaceID, PublicKeyID: body.PublicKeyID, PublicKey: body.PublicKey, Enabled: enabled, CreatedAt: now, UpdatedAt: now}
 	if err := s.meta.CreateOAuthApp(r.Context(), app); err != nil {
 		errorJSON(w, http.StatusConflict, "oauth_app_exists", "client_id is already registered")
 		return

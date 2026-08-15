@@ -28,7 +28,7 @@ type Server struct {
 	meta   *meta.Store
 	writer *ingest.Writer
 	traces interface {
-		GetTracePage(ctx context.Context, projectID, traceID, cursor string, limit int) (tracestore.TracePage, error)
+		GetTracePage(ctx context.Context, workspaceID, traceID, cursor string, limit int) (tracestore.TracePage, error)
 		ListTraces(ctx context.Context, query domain.Query) (domain.Page, error)
 		Metrics(ctx context.Context, query domain.MetricsQuery) (domain.Metrics, error)
 	}
@@ -127,6 +127,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/workspaces", s.listUserWorkspaces)
 	mux.HandleFunc("POST /api/v1/workspaces", s.createUserWorkspace)
 	mux.HandleFunc("POST /api/v1/workspaces/{workspaceID}/switch", s.switchUserWorkspace)
+	mux.HandleFunc("GET /api/v1/workspaces/{workspaceID}/keys", s.listUserWorkspaceKeys)
+	mux.HandleFunc("POST /api/v1/workspaces/{workspaceID}/keys", s.createUserWorkspaceKey)
+	mux.HandleFunc("POST /api/v1/workspaces/{workspaceID}/keys/{keyID}/revoke", s.revokeUserWorkspaceKey)
 	mux.HandleFunc("POST /api/v1/ingest", s.ingest)
 	mux.HandleFunc("POST /v1/loop/traces/ingest", s.cozeLoopIngest)
 	mux.HandleFunc("POST /api/permission/oauth2/token", s.oauthToken)
@@ -134,11 +137,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/traces", s.listTraces)
 	mux.HandleFunc("GET /api/v1/dashboard", s.dashboard)
 	mux.HandleFunc("GET /api/v1/ingest/stats", s.ingestStats)
-	mux.HandleFunc("GET /api/v1/projects", s.listProjects)
-	mux.HandleFunc("POST /api/v1/projects", s.createProject)
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/keys", s.listProjectKeys)
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/keys", s.createProjectKey)
-	mux.HandleFunc("POST /api/v1/keys/{keyID}/revoke", s.revokeKey)
 	mux.HandleFunc("GET /api/v1/oauth/apps", s.listOAuthApps)
 	mux.HandleFunc("POST /api/v1/oauth/apps", s.createOAuthApp)
 	mux.Handle("/api/", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -173,6 +171,10 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
 		return
 	}
+	workspaceID, ok := s.workspaceForRequest(w, r, key)
+	if !ok {
+		return
+	}
 	var req struct {
 		Spans []domain.Span `json:"spans"`
 	}
@@ -186,7 +188,7 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now().UTC()
 	for i := range req.Spans {
-		req.Spans[i].ProjectID = key.ProjectID
+		req.Spans[i].WorkspaceID = workspaceID
 		if req.Spans[i].ReceivedAt.IsZero() {
 			req.Spans[i].ReceivedAt = now
 		}
@@ -212,12 +214,16 @@ func (s *Server) cozeLoopIngest(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
 		return
 	}
+	workspaceID, ok := s.workspaceForRequest(w, r, key)
+	if !ok {
+		return
+	}
 	var req cozeloop.UploadSpanData
 	if err = json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<20)).Decode(&req); err != nil {
 		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
 		return
 	}
-	spans, err := req.Map(key.ProjectID, time.Now().UTC())
+	spans, err := req.Map(workspaceID, time.Now().UTC())
 	if err != nil {
 		errorJSON(w, http.StatusBadRequest, "invalid_span", err.Error())
 		return
@@ -244,160 +250,24 @@ func (s *Server) cozeLoopIngest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ingestStats(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
+	if !s.requireWorkspaceOwnerForHeader(w, r) {
 		return
 	}
 	writeJSON(w, http.StatusOK, s.writer.Metrics())
 }
 
-func (s *Server) listProjects(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
-	projects, err := s.meta.ListProjects(r.Context())
-	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list projects")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": projects})
-}
-
-func (s *Server) createProject(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
-	var body struct {
-		Name    string `json:"name"`
-		KeyName string `json:"key_name"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
-		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
-		return
-	}
-	if strings.TrimSpace(body.Name) == "" || len(body.Name) > 128 {
-		errorJSON(w, http.StatusBadRequest, "invalid_project", "name is required and must be at most 128 bytes")
-		return
-	}
-	projectID, err := randomID("proj_", 12)
-	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "id_generation_failed", "could not generate project id")
-		return
-	}
-	now := time.Now().UTC()
-	project := meta.Project{ID: projectID, Name: strings.TrimSpace(body.Name), CreatedAt: now, UpdatedAt: now}
-	key, token, err := s.newKey(projectID, body.KeyName, "project")
-	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "key_generation_failed", "could not create API key")
-		return
-	}
-	if err := s.meta.CreateProjectWithAPIKey(r.Context(), project, key); err != nil {
-		errorJSON(w, http.StatusConflict, "project_exists", "could not create project")
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"project": project, "api_key": keyView{ID: key.ID, ProjectID: key.ProjectID, Name: key.Name, Role: key.Role, Token: token}})
-}
-
-func (s *Server) listProjectKeys(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
-	projectID := r.PathValue("projectID")
-	if _, err := s.meta.Project(r.Context(), projectID); err != nil {
-		errorJSON(w, http.StatusNotFound, "project_not_found", "project was not found")
-		return
-	}
-	keys, err := s.meta.ListAPIKeys(r.Context(), projectID)
-	if err != nil {
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not list API keys")
-		return
-	}
-	result := make([]keyView, 0, len(keys))
-	for _, key := range keys {
-		result = append(result, keyView{ID: key.ID, ProjectID: key.ProjectID, Name: key.Name, Role: key.Role, ExpiresAt: key.ExpiresAt, Revoked: key.Revoked, LastUsedAt: key.LastUsedAt})
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": result})
-}
-
-func (s *Server) createProjectKey(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
-	projectID := r.PathValue("projectID")
-	if _, err := s.meta.Project(r.Context(), projectID); err != nil {
-		errorJSON(w, http.StatusNotFound, "project_not_found", "project was not found")
-		return
-	}
-	var body struct {
-		Name      string `json:"name"`
-		ExpiresAt string `json:"expires_at"`
-	}
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&body); err != nil {
-		errorJSON(w, http.StatusBadRequest, "invalid_json", "request body is invalid")
-		return
-	}
-	key, token, err := s.newKey(projectID, body.Name, "project")
-	if err != nil {
-		errorJSON(w, http.StatusBadRequest, "invalid_key", err.Error())
-		return
-	}
-	if body.ExpiresAt != "" {
-		expires, parseErr := time.Parse(time.RFC3339, body.ExpiresAt)
-		if parseErr != nil {
-			errorJSON(w, http.StatusBadRequest, "invalid_expires_at", "expires_at must be RFC3339")
-			return
-		}
-		if !expires.After(time.Now().UTC()) {
-			errorJSON(w, http.StatusBadRequest, "invalid_expires_at", "expires_at must be in the future")
-			return
-		}
-		key.ExpiresAt = &expires
-	}
-	if err := s.meta.CreateAPIKey(r.Context(), key); err != nil {
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not save API key")
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]any{"api_key": keyView{ID: key.ID, ProjectID: key.ProjectID, Name: key.Name, Role: key.Role, Token: token, ExpiresAt: key.ExpiresAt}})
-}
-
-func (s *Server) revokeKey(w http.ResponseWriter, r *http.Request) {
-	if !s.requireAdmin(w, r) {
-		return
-	}
-	if err := s.meta.RevokeAPIKey(r.Context(), r.PathValue("keyID")); err != nil {
-		if errors.Is(err, meta.ErrNotFound) {
-			errorJSON(w, http.StatusNotFound, "key_not_found", "API key was not found")
-			return
-		}
-		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not revoke API key")
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"revoked": true})
-}
-
 type keyView struct {
-	ID         string     `json:"id"`
-	ProjectID  string     `json:"project_id"`
-	Name       string     `json:"name"`
-	Role       string     `json:"role"`
-	Token      string     `json:"token,omitempty"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	Revoked    bool       `json:"revoked,omitempty"`
-	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	ID          string     `json:"id"`
+	WorkspaceID string     `json:"workspace_id"`
+	Name        string     `json:"name"`
+	Role        string     `json:"role"`
+	Token       string     `json:"token,omitempty"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"`
+	Revoked     bool       `json:"revoked,omitempty"`
+	LastUsedAt  *time.Time `json:"last_used_at,omitempty"`
 }
 
-func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
-	key, err := s.authenticate(r)
-	if err != nil {
-		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
-		return false
-	}
-	if key.Role != "admin" {
-		errorJSON(w, http.StatusForbidden, "admin_required", "admin API key required")
-		return false
-	}
-	return true
-}
-func (s *Server) newKey(projectID, name, role string) (meta.APIKey, string, error) {
+func (s *Server) newKey(workspaceID, name, role string) (meta.APIKey, string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = "API Key"
@@ -414,7 +284,7 @@ func (s *Server) newKey(projectID, name, role string) (meta.APIKey, string, erro
 		return meta.APIKey{}, "", err
 	}
 	token := "tr_" + hex.EncodeToString(bytes[:])
-	return meta.APIKey{ID: id, ProjectID: projectID, Name: strings.TrimSpace(name), Role: role, TokenHash: meta.HashToken(token)}, token, nil
+	return meta.APIKey{ID: id, WorkspaceID: workspaceID, Name: strings.TrimSpace(name), Role: role, TokenHash: meta.HashToken(token)}, token, nil
 }
 func randomID(prefix string, size int) (string, error) {
 	bytes := make([]byte, size)
@@ -427,6 +297,10 @@ func (s *Server) getTrace(w http.ResponseWriter, r *http.Request) {
 	key, err := s.authenticate(r)
 	if err != nil {
 		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
+		return
+	}
+	workspaceID, ok := s.workspaceForRequest(w, r, key)
+	if !ok {
 		return
 	}
 	traceID := strings.TrimPrefix(r.URL.Path, "/api/v1/traces/")
@@ -443,7 +317,7 @@ func (s *Server) getTrace(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = parsed
 	}
-	page, err := s.traces.GetTracePage(r.Context(), key.ProjectID, traceID, r.URL.Query().Get("cursor"), limit)
+	page, err := s.traces.GetTracePage(r.Context(), workspaceID, traceID, r.URL.Query().Get("cursor"), limit)
 	if err != nil {
 		s.logger.Error("get trace", "error", err)
 		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not read trace")
@@ -467,7 +341,11 @@ func (s *Server) listTraces(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
 		return
 	}
-	q := domain.Query{ProjectID: key.ProjectID, Status: r.URL.Query().Get("status"), Kind: r.URL.Query().Get("kind"), Name: r.URL.Query().Get("name"), TraceID: r.URL.Query().Get("trace_id"), Cursor: r.URL.Query().Get("cursor")}
+	workspaceID, ok := s.workspaceForRequest(w, r, key)
+	if !ok {
+		return
+	}
+	q := domain.Query{WorkspaceID: workspaceID, Status: r.URL.Query().Get("status"), Kind: r.URL.Query().Get("kind"), Name: r.URL.Query().Get("name"), TraceID: r.URL.Query().Get("trace_id"), Cursor: r.URL.Query().Get("cursor")}
 	for name, target := range map[string]**time.Time{"start_time": &q.StartTime, "end_time": &q.EndTime} {
 		if raw := r.URL.Query().Get(name); raw != "" {
 			parsed, parseErr := time.Parse(time.RFC3339, raw)
@@ -519,7 +397,11 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusUnauthorized, "invalid_api_key", "invalid API key")
 		return
 	}
-	q := domain.MetricsQuery{ProjectID: key.ProjectID}
+	workspaceID, ok := s.workspaceForRequest(w, r, key)
+	if !ok {
+		return
+	}
+	q := domain.MetricsQuery{WorkspaceID: workspaceID}
 	for name, target := range map[string]*time.Time{"start_time": &q.StartTime, "end_time": &q.EndTime} {
 		if raw := r.URL.Query().Get(name); raw != "" {
 			parsed, parseErr := time.Parse(time.RFC3339, raw)
@@ -543,6 +425,26 @@ func (s *Server) authenticate(r *http.Request) (meta.APIKey, error) {
 		return meta.APIKey{}, meta.ErrNotFound
 	}
 	return s.meta.Authenticate(r.Context(), strings.TrimSpace(strings.TrimPrefix(h, "Bearer ")))
+}
+
+func (s *Server) workspaceForRequest(w http.ResponseWriter, r *http.Request, key meta.APIKey) (string, bool) {
+	if key.UserID == "" {
+		return key.WorkspaceID, true
+	}
+	workspaceID := strings.TrimSpace(r.Header.Get("X-Tracy-Workspace-ID"))
+	if workspaceID == "" {
+		errorJSON(w, http.StatusBadRequest, "workspace_required", "X-Tracy-Workspace-ID is required for user sessions")
+		return "", false
+	}
+	if err := s.meta.UserCanAccessWorkspace(r.Context(), key.UserID, workspaceID); err != nil {
+		if errors.Is(err, meta.ErrNotFound) {
+			errorJSON(w, http.StatusForbidden, "workspace_forbidden", "user cannot access this workspace")
+			return "", false
+		}
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not verify workspace access")
+		return "", false
+	}
+	return workspaceID, true
 }
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
