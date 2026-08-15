@@ -125,10 +125,13 @@ func TestHTTPContract(t *testing.T) {
 	}
 	_ = largeResp.Body.Close()
 	var firstPage struct {
+		StartTime  string `json:"start_time"`
+		EndTime    string `json:"end_time"`
+		SpanCount  int    `json:"span_count"`
 		Spans      []any  `json:"spans"`
 		NextCursor string `json:"next_cursor"`
 	}
-	for attempt := 0; attempt < 20; attempt++ {
+	for attempt := 0; attempt < 100; attempt++ {
 		pageReq, _ := http.NewRequest(http.MethodGet, base+"/api/v1/traces/contract-large-trace?limit=100", nil)
 		pageReq.Header.Set("Authorization", "Bearer "+key)
 		pageResp, requestErr := http.DefaultClient.Do(pageReq)
@@ -141,12 +144,15 @@ func TestHTTPContract(t *testing.T) {
 			}
 			_ = pageResp.Body.Close()
 			if len(firstPage.Spans) == 100 && firstPage.NextCursor != "" {
+				if firstPage.SpanCount != 101 || firstPage.StartTime == "" || firstPage.EndTime == "" {
+					t.Fatalf("trace summary is incomplete: start=%q end=%q count=%d", firstPage.StartTime, firstPage.EndTime, firstPage.SpanCount)
+				}
 				break
 			}
 		} else {
 			_ = pageResp.Body.Close()
 		}
-		if attempt == 19 {
+		if attempt == 99 {
 			t.Fatalf("trace page did not return a cursor: spans=%d cursor=%q", len(firstPage.Spans), firstPage.NextCursor)
 		}
 		time.Sleep(50 * time.Millisecond)

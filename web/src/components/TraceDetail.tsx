@@ -13,6 +13,11 @@ import IconTick from "@douyinfe/semi-icons/lib/es/icons/IconTick";
 type TraceDetailProps = {
   selectedID: string;
   selected: Span[];
+  details: {
+    start_time: string;
+    end_time: string;
+    span_count: number;
+  } | null;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -25,6 +30,101 @@ function formatDuration(nanoseconds: number) {
   if (ms < 1_000) return `${ms.toFixed(2)}ms`;
   if (ms < 60_000) return `${(ms / 1_000).toFixed(2)}s`;
   return `${Math.floor(ms / 60_000)}m ${((ms % 60_000) / 1_000).toFixed(1)}s`;
+}
+
+function formatOffset(milliseconds: number) {
+  if (milliseconds < 1) return `${Math.round(milliseconds * 1000)}μs`;
+  if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`;
+  return `${(milliseconds / 1_000).toFixed(2)}s`;
+}
+
+function Waterfall({
+  spans,
+  details,
+  selectedSpanID,
+  onSelect,
+}: {
+  spans: Span[];
+  details: TraceDetailProps["details"];
+  selectedSpanID: string;
+  onSelect: (id: string) => void;
+}) {
+  const starts = spans.map((span) => new Date(span.start_time).getTime());
+  const ends = spans.map((span) => new Date(span.start_time).getTime() + span.duration / 1_000_000);
+  const traceStart = details
+    ? new Date(details.start_time).getTime()
+    : starts.length
+      ? Math.min(...starts)
+      : 0;
+  const traceEnd = details
+    ? new Date(details.end_time).getTime()
+    : ends.length
+      ? Math.max(...ends)
+      : 1;
+  const traceDuration = Math.max(traceEnd - traceStart, 1);
+  const spanByID = new Map(spans.map((span) => [span.span_id, span]));
+  const depthCache = new Map<string, number>();
+
+  function depth(span: Span, trail = new Set<string>()): number {
+    if (!span.parent_span_id || !spanByID.has(span.parent_span_id) || trail.has(span.span_id))
+      return 0;
+    const cached = depthCache.get(span.span_id);
+    if (cached !== undefined) return cached;
+    const parent = spanByID.get(span.parent_span_id);
+    if (!parent) return 0;
+    const value = depth(parent, new Set(trail).add(span.span_id)) + 1;
+    depthCache.set(span.span_id, value);
+    return value;
+  }
+
+  const ticks = Array.from({ length: 5 }, (_, index) => {
+    const ratio = index / 4;
+    return { ratio, label: formatOffset(traceDuration * ratio) };
+  });
+
+  return (
+    <div className="waterfall-scroll">
+      <div className="waterfall">
+        <div className="waterfall-header">
+          <span className="waterfall-label">{spans.length} spans</span>
+          <div className="waterfall-axis" aria-hidden="true">
+            {ticks.map((tick) => (
+              <span key={tick.ratio} style={{ left: `${tick.ratio * 100}%` }}>
+                {tick.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        {spans.map((span) => {
+          const start = new Date(span.start_time).getTime();
+          const left = Math.max(0, ((start - traceStart) / traceDuration) * 100);
+          const width = Math.max(0.7, (span.duration / 1_000_000 / traceDuration) * 100);
+          const kind = span.kind.toLowerCase() || "custom";
+          return (
+            <div className="waterfall-row" key={span.span_id}>
+              <div className="waterfall-label" style={{ paddingLeft: `${depth(span) * 16 + 8}px` }}>
+                <span className={`waterfall-kind ${kind}`} aria-hidden="true" />
+                <span className="waterfall-name" title={span.name}>
+                  {span.name}
+                </span>
+                <span className="waterfall-kind-name">{span.kind || "custom"}</span>
+              </div>
+              <div className="waterfall-track">
+                <button
+                  aria-label={`${span.name}, ${formatDuration(span.duration)}, ${span.status || "ok"}`}
+                  className={`waterfall-bar ${kind} ${span.status === "error" ? "error" : ""} ${selectedSpanID === span.span_id ? "active" : ""}`}
+                  style={{ left: `${left}%`, width: `${width}%` }}
+                  title={`${span.name} · ${formatDuration(span.duration)}`}
+                  onClick={() => onSelect(span.span_id)}
+                  type="button"
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function kindGlyph(kind: string) {
@@ -154,6 +254,7 @@ function SpanTree({
 export function TraceDetail({
   selectedID,
   selected,
+  details,
   hasMore,
   loadingMore,
   onLoadMore,
@@ -161,13 +262,19 @@ export function TraceDetail({
 }: TraceDetailProps) {
   const { t } = usePreferences();
   const [selectedSpanID, setSelectedSpanID] = useState(selected[0]?.span_id ?? "");
+  const [view, setView] = useState<"tree" | "waterfall">("tree");
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [expandedPayload, setExpandedPayload] = useState<"input" | "output" | null>(null);
   const [jsonMode, setJsonMode] = useState(true);
   const [copiedTarget, setCopiedTarget] = useState<string | null>(null);
 
   useEffect(() => {
-    setSelectedSpanID(selected[0]?.span_id ?? "");
-  }, [selectedID, selected]);
+    setInspectorOpen(false);
+  }, [selectedID]);
+
+  useEffect(() => {
+    if (!selectedSpanID && selected[0]) setSelectedSpanID(selected[0].span_id);
+  }, [selected, selectedSpanID]);
 
   if (!selectedID) {
     return (
@@ -182,6 +289,9 @@ export function TraceDetail({
   }
 
   const activeSpan = selected.find((span) => span.span_id === selectedSpanID) ?? selected[0];
+  const traceDuration = details
+    ? new Date(details.end_time).getTime() - new Date(details.start_time).getTime()
+    : selected.reduce((max, span) => Math.max(max, span.duration / 1_000_000), 0);
   const attributes = activeSpan?.attributes ?? {};
   const { runtime: rootRuntime, metadata: rawMetadata, ...attributeMetadata } = attributes;
   const parsedMetadata = parseJSON(rawMetadata ?? attributeMetadata);
@@ -198,6 +308,11 @@ export function TraceDetail({
   const outputText = jsonMode ? formatPayload(activeSpan?.output) : activeSpan?.output || "—";
   const expandedInputText = formatPayload(activeSpan?.input);
   const expandedOutputText = formatPayload(activeSpan?.output);
+
+  function selectSpan(id: string) {
+    setSelectedSpanID(id);
+    setInspectorOpen(true);
+  }
 
   async function copyValue(target: string, value: string) {
     if (!navigator.clipboard) return;
@@ -223,122 +338,159 @@ export function TraceDetail({
         >
           {selected.some((span) => span.status === "error") ? t("errors") : t("healthyStatus")}
         </span>
+        <span className="detail-toolbar-fact">{formatDuration(traceDuration * 1_000_000)}</span>
         <span className="detail-toolbar-fact">
-          {formatDuration(selected.reduce((total, span) => total + span.duration, 0))}
-        </span>
-        <span className="detail-toolbar-fact">
-          {selected.length} {t("spans")}
+          {details?.span_count ?? selected.length} {t("spans")}
         </span>
       </div>
-      <div className="detail-workbench">
+      <div className={`detail-workbench ${view}-mode ${inspectorOpen ? "inspector-open" : ""}`}>
         <div className="detail-tree-column">
-          <SpanTree
-            spans={selected}
-            selectedSpanID={activeSpan?.span_id ?? ""}
-            onSelect={setSelectedSpanID}
+          <div className="detail-view-switch">
+            <button
+              className={view === "tree" ? "active" : ""}
+              onClick={() => setView("tree")}
+              type="button"
+            >
+              {t("treeView")}
+            </button>
+            <button
+              className={view === "waterfall" ? "active" : ""}
+              onClick={() => setView("waterfall")}
+              type="button"
+            >
+              {t("waterfallView")}
+            </button>
+          </div>
+          {view === "tree" ? (
+            <SpanTree
+              spans={selected}
+              selectedSpanID={activeSpan?.span_id ?? ""}
+              onSelect={selectSpan}
+            />
+          ) : (
+            <Waterfall
+              spans={selected}
+              details={details}
+              selectedSpanID={activeSpan?.span_id ?? ""}
+              onSelect={selectSpan}
+            />
+          )}
+        </div>
+        <aside className="detail-inspector" aria-label={t("spanDetails")}>
+          <Button
+            aria-label={t("close")}
+            className="detail-inspector-close"
+            icon={<IconClose />}
+            onClick={() => setInspectorOpen(false)}
+            theme="borderless"
+            type="tertiary"
           />
-        </div>
-        <div className="detail-content-column">
-          <Tabs className="detail-tabs" defaultActiveKey="run" type="line">
-            <TabPane itemKey="run" tab={t("run")}>
-              <div className="detail-tab-content">
-                <div className="detail-section-title">
-                  <h3>{t("input")}</h3>
-                  <div className="payload-actions">
-                    <Tooltip content={copiedTarget === "input" ? t("copied") : t("copy")}>
-                      <Button
-                        aria-label={t("copy")}
-                        className={copiedTarget === "input" ? "copy-button copied" : "copy-button"}
-                        icon={copiedTarget === "input" ? <IconTick /> : <IconCopy />}
-                        onClick={() => void copyValue("input", inputText)}
-                        theme="borderless"
-                        type="tertiary"
-                      />
-                    </Tooltip>
-                    <Button
-                      className="payload-json-toggle"
-                      onClick={() => setJsonMode((mode) => !mode)}
-                      theme="borderless"
-                      type="tertiary"
-                    >
-                      {jsonMode ? "JSON" : "TEXT"}
-                    </Button>
-                    <Tooltip content={t("expand")}>
-                      <Button
-                        aria-label={t("expand")}
-                        icon={<IconExpand />}
-                        onClick={() => setExpandedPayload("input")}
-                        theme="borderless"
-                        type="tertiary"
-                      />
-                    </Tooltip>
-                  </div>
-                </div>
-                <pre className="detail-json-placeholder">{inputText}</pre>
-                <div className="detail-section-title">
-                  <h3>{t("output")}</h3>
-                  <div className="payload-actions">
-                    <Tooltip content={copiedTarget === "output" ? t("copied") : t("copy")}>
-                      <Button
-                        aria-label={t("copy")}
-                        className={copiedTarget === "output" ? "copy-button copied" : "copy-button"}
-                        icon={copiedTarget === "output" ? <IconTick /> : <IconCopy />}
-                        onClick={() => void copyValue("output", outputText)}
-                        theme="borderless"
-                        type="tertiary"
-                      />
-                    </Tooltip>
-                    <Button
-                      className="payload-json-toggle"
-                      onClick={() => setJsonMode((mode) => !mode)}
-                      theme="borderless"
-                      type="tertiary"
-                    >
-                      {jsonMode ? "JSON" : "TEXT"}
-                    </Button>
-                    <Tooltip content={t("expand")}>
-                      <Button
-                        aria-label={t("expand")}
-                        icon={<IconExpand />}
-                        onClick={() => setExpandedPayload("output")}
-                        theme="borderless"
-                        type="tertiary"
-                      />
-                    </Tooltip>
-                  </div>
-                </div>
-                <pre className="detail-json-placeholder">{outputText}</pre>
-              </div>
-            </TabPane>
-            <TabPane itemKey="metadata" tab={t("metadata")}>
-              <div className="detail-tab-content">
-                <div className="detail-json-card">
+          <div className="detail-content-column">
+            <Tabs className="detail-tabs" defaultActiveKey="run" type="line">
+              <TabPane itemKey="run" tab={t("run")}>
+                <div className="detail-tab-content">
                   <div className="detail-section-title">
-                    <h3>{t("metadata")}</h3>
+                    <h3>{t("input")}</h3>
+                    <div className="payload-actions">
+                      <Tooltip content={copiedTarget === "input" ? t("copied") : t("copy")}>
+                        <Button
+                          aria-label={t("copy")}
+                          className={
+                            copiedTarget === "input" ? "copy-button copied" : "copy-button"
+                          }
+                          icon={copiedTarget === "input" ? <IconTick /> : <IconCopy />}
+                          onClick={() => void copyValue("input", inputText)}
+                          theme="borderless"
+                          type="tertiary"
+                        />
+                      </Tooltip>
+                      <Button
+                        className="payload-json-toggle"
+                        onClick={() => setJsonMode((mode) => !mode)}
+                        theme="borderless"
+                        type="tertiary"
+                      >
+                        {jsonMode ? "JSON" : "TEXT"}
+                      </Button>
+                      <Tooltip content={t("expand")}>
+                        <Button
+                          aria-label={t("expand")}
+                          icon={<IconExpand />}
+                          onClick={() => setExpandedPayload("input")}
+                          theme="borderless"
+                          type="tertiary"
+                        />
+                      </Tooltip>
+                    </div>
                   </div>
-                  <pre className="detail-json-placeholder">{metadataText}</pre>
-                </div>
-                <div className="detail-json-card">
+                  <pre className="detail-json-placeholder">{inputText}</pre>
                   <div className="detail-section-title">
-                    <h3>{t("runtime")}</h3>
+                    <h3>{t("output")}</h3>
+                    <div className="payload-actions">
+                      <Tooltip content={copiedTarget === "output" ? t("copied") : t("copy")}>
+                        <Button
+                          aria-label={t("copy")}
+                          className={
+                            copiedTarget === "output" ? "copy-button copied" : "copy-button"
+                          }
+                          icon={copiedTarget === "output" ? <IconTick /> : <IconCopy />}
+                          onClick={() => void copyValue("output", outputText)}
+                          theme="borderless"
+                          type="tertiary"
+                        />
+                      </Tooltip>
+                      <Button
+                        className="payload-json-toggle"
+                        onClick={() => setJsonMode((mode) => !mode)}
+                        theme="borderless"
+                        type="tertiary"
+                      >
+                        {jsonMode ? "JSON" : "TEXT"}
+                      </Button>
+                      <Tooltip content={t("expand")}>
+                        <Button
+                          aria-label={t("expand")}
+                          icon={<IconExpand />}
+                          onClick={() => setExpandedPayload("output")}
+                          theme="borderless"
+                          type="tertiary"
+                        />
+                      </Tooltip>
+                    </div>
                   </div>
-                  <pre className="detail-json-placeholder">{runtimeText}</pre>
+                  <pre className="detail-json-placeholder">{outputText}</pre>
                 </div>
-              </div>
-            </TabPane>
-          </Tabs>
-        </div>
-        <aside className="detail-facts-panel">
-          <span>{t("status")}</span>
-          <b>{activeSpan?.status || "—"}</b>
-          <span>{t("spanID")}</span>
-          <b>{activeSpan?.span_id || "—"}</b>
-          <span>{t("type")}</span>
-          <b>{activeSpan?.kind || "custom"}</b>
-          <span>{t("duration")}</span>
-          <b>{formatDuration(activeSpan?.duration ?? 0)}</b>
-          <span>{t("startTime")}</span>
-          <b>{activeSpan ? new Date(activeSpan.start_time).toLocaleString() : "—"}</b>
+              </TabPane>
+              <TabPane itemKey="metadata" tab={t("metadata")}>
+                <div className="detail-tab-content">
+                  <div className="detail-json-card">
+                    <div className="detail-section-title">
+                      <h3>{t("metadata")}</h3>
+                    </div>
+                    <pre className="detail-json-placeholder">{metadataText}</pre>
+                  </div>
+                  <div className="detail-json-card">
+                    <div className="detail-section-title">
+                      <h3>{t("runtime")}</h3>
+                    </div>
+                    <pre className="detail-json-placeholder">{runtimeText}</pre>
+                  </div>
+                </div>
+              </TabPane>
+            </Tabs>
+          </div>
+          <div className="detail-facts-panel">
+            <span>{t("status")}</span>
+            <b>{activeSpan?.status || "—"}</b>
+            <span>{t("spanID")}</span>
+            <b>{activeSpan?.span_id || "—"}</b>
+            <span>{t("type")}</span>
+            <b>{activeSpan?.kind || "custom"}</b>
+            <span>{t("duration")}</span>
+            <b>{formatDuration(activeSpan?.duration ?? 0)}</b>
+            <span>{t("startTime")}</span>
+            <b>{activeSpan ? new Date(activeSpan.start_time).toLocaleString() : "—"}</b>
+          </div>
         </aside>
       </div>
       {(hasMore || loadingMore) && (

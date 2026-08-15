@@ -148,6 +148,18 @@ func (s *Store) GetTracePage(ctx context.Context, workspaceID, traceID, cursor s
 	return page, nil
 }
 
+func (s *Store) GetTraceSummary(ctx context.Context, workspaceID, traceID string) (domain.Summary, error) {
+	var summary domain.Summary
+	var start, end int64
+	err := s.db.QueryRowContext(ctx, `SELECT workspace_id,trace_id,start_time,end_time,span_count,status,input_tokens,output_tokens FROM trace_summaries WHERE workspace_id=? AND trace_id=?`, workspaceID, traceID).Scan(&summary.WorkspaceID, &summary.TraceID, &start, &end, &summary.SpanCount, &summary.Status, &summary.InputTokens, &summary.OutputTokens)
+	if err != nil {
+		return domain.Summary{}, err
+	}
+	summary.StartTime = time.UnixMicro(start).UTC()
+	summary.EndTime = time.UnixMicro(end).UTC()
+	return summary, nil
+}
+
 func (s *Store) ListTraces(ctx context.Context, q domain.Query) (domain.Page, error) {
 	limit := q.Limit
 	if limit <= 0 || limit > 100 {

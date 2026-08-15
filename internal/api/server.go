@@ -29,6 +29,7 @@ type Server struct {
 	writer *ingest.Writer
 	traces interface {
 		GetTracePage(ctx context.Context, workspaceID, traceID, cursor string, limit int) (tracestore.TracePage, error)
+		GetTraceSummary(ctx context.Context, workspaceID, traceID string) (domain.Summary, error)
 		ListTraces(ctx context.Context, query domain.Query) (domain.Page, error)
 		Metrics(ctx context.Context, query domain.MetricsQuery) (domain.Metrics, error)
 	}
@@ -49,6 +50,7 @@ func (s *Server) MarkReady() { s.readyFlag.Store(true) }
 
 func NewServer(m *meta.Store, w *ingest.Writer, t interface {
 	GetTracePage(context.Context, string, string, string, int) (tracestore.TracePage, error)
+	GetTraceSummary(context.Context, string, string) (domain.Summary, error)
 	ListTraces(context.Context, domain.Query) (domain.Page, error)
 	Metrics(context.Context, domain.MetricsQuery) (domain.Metrics, error)
 }, logger *slog.Logger, trustedProxyConfig ...string) *Server {
@@ -327,11 +329,20 @@ func (s *Server) getTrace(w http.ResponseWriter, r *http.Request) {
 		errorJSON(w, http.StatusNotFound, "trace_not_found", "trace was not found")
 		return
 	}
+	summary, err := s.traces.GetTraceSummary(r.Context(), workspaceID, traceID)
+	if err != nil {
+		s.logger.Error("get trace summary", "error", err)
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not read trace summary")
+		return
+	}
 	response := struct {
 		TraceID    string        `json:"trace_id"`
+		StartTime  time.Time     `json:"start_time"`
+		EndTime    time.Time     `json:"end_time"`
+		SpanCount  int           `json:"span_count"`
 		Spans      []domain.Span `json:"spans"`
 		NextCursor string        `json:"next_cursor,omitempty"`
-	}{TraceID: traceID, Spans: page.Spans, NextCursor: page.NextCursor}
+	}{TraceID: traceID, StartTime: summary.StartTime, EndTime: summary.EndTime, SpanCount: summary.SpanCount, Spans: page.Spans, NextCursor: page.NextCursor}
 	writeJSON(w, http.StatusOK, response)
 }
 

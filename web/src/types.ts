@@ -29,6 +29,15 @@ export type Span = {
 
 export type Page = { items: TraceSummary[]; next_cursor?: string };
 
+export type TraceDetails = {
+  trace_id: string;
+  start_time: string;
+  end_time: string;
+  span_count: number;
+  spans: Span[];
+  next_cursor?: string;
+};
+
 export type DashboardMetrics = {
   request_count: number;
   error_count: number;

@@ -265,6 +265,7 @@ function App() {
                       <TraceDetail
                         selectedID={explorer.selectedID}
                         selected={explorer.selected}
+                        details={explorer.selectedDetails}
                         hasMore={Boolean(explorer.selectedNextCursor)}
                         loadingMore={explorer.traceLoading}
                         onLoadMore={() => void explorer.loadMoreTrace()}

@@ -3,7 +3,7 @@ import type {
   CreatedAPIKey,
   DashboardMetrics,
   Page,
-  Span,
+  TraceDetails,
   User,
   Workspace,
 } from "../types";
@@ -69,7 +69,7 @@ export async function getTrace(
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.limit) params.set("limit", String(options.limit));
   const query = params.toString();
-  return request<{ trace_id: string; spans: Span[]; next_cursor?: string }>(
+  return request<TraceDetails>(
     `/api/v1/traces/${encodeURIComponent(id)}${query ? `?${query}` : ""}`,
     token,
     undefined,

@@ -26,6 +26,9 @@ func (f *fakeStore) GetTrace(context.Context, string, string) ([]domain.Span, er
 func (f *fakeStore) GetTracePage(context.Context, string, string, string, int) (tracestore.TracePage, error) {
 	return tracestore.TracePage{}, nil
 }
+func (f *fakeStore) GetTraceSummary(context.Context, string, string) (domain.Summary, error) {
+	return domain.Summary{}, nil
+}
 func (f *fakeStore) ListTraces(context.Context, domain.Query) (domain.Page, error) {
 	return domain.Page{}, nil
 }

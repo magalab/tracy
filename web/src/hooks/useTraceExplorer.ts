@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDashboardMetrics, getTrace, listTraces } from "../api/client";
-import type { DashboardMetrics, Page, Span } from "../types";
+import type { DashboardMetrics, Page, Span, TraceDetails } from "../types";
 
 export function useTraceExplorer(
   token: string,
@@ -13,6 +13,10 @@ export function useTraceExplorer(
   const [page, setPage] = useState<Page>({ items: [] });
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [selected, setSelected] = useState<Span[]>([]);
+  const [selectedDetails, setSelectedDetails] = useState<Pick<
+    TraceDetails,
+    "start_time" | "end_time" | "span_count"
+  > | null>(null);
   const [selectedID, setSelectedID] = useState("");
   const [selectedNextCursor, setSelectedNextCursor] = useState<string | undefined>();
   const [traceLoading, setTraceLoading] = useState(false);
@@ -65,6 +69,7 @@ export function useTraceExplorer(
 
   useEffect(() => {
     setSelected([]);
+    setSelectedDetails(null);
     setSelectedID("");
     if (token && workspaceID) {
       void loadPage();
@@ -77,6 +82,7 @@ export function useTraceExplorer(
       const requestID = ++traceRequestID.current;
       setSelectedID(id);
       setSelected([]);
+      setSelectedDetails(null);
       setSelectedNextCursor(undefined);
       setTraceLoading(true);
       setError("");
@@ -84,11 +90,17 @@ export function useTraceExplorer(
         const result = await getTrace(id, token, workspaceID, { limit: 100 });
         if (requestID === traceRequestID.current) {
           setSelected(result.spans);
+          setSelectedDetails({
+            start_time: result.start_time,
+            end_time: result.end_time,
+            span_count: result.span_count,
+          });
           setSelectedNextCursor(result.next_cursor);
         }
       } catch (err) {
         if (requestID === traceRequestID.current) {
           setSelectedID("");
+          setSelectedDetails(null);
           setError(err instanceof Error ? err.message : String(err));
         }
       } finally {
@@ -123,6 +135,7 @@ export function useTraceExplorer(
     traceRequestID.current += 1;
     setSelectedID("");
     setSelected([]);
+    setSelectedDetails(null);
     setSelectedNextCursor(undefined);
   }, []);
 
@@ -131,6 +144,7 @@ export function useTraceExplorer(
       page,
       metrics,
       selected,
+      selectedDetails,
       selectedID,
       selectedNextCursor,
       traceLoading,
@@ -155,6 +169,7 @@ export function useTraceExplorer(
       openTrace,
       page,
       selected,
+      selectedDetails,
       selectedID,
       selectedNextCursor,
       traceLoading,

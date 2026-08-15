@@ -314,9 +314,12 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [trace_id, spans]
+                required: [trace_id, start_time, end_time, span_count, spans]
                 properties:
                   trace_id: { type: string }
+                  start_time: { type: string, format: date-time }
+                  end_time: { type: string, format: date-time }
+                  span_count: { type: integer, minimum: 1 }
                   spans:
                     type: array
                     items: { $ref: '#/components/schemas/Span' }

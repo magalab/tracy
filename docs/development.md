@@ -14,7 +14,7 @@ Writer 会对失败批次进行有限重试，并通过 `GET /api/v1/ingest/stat
 
 Span 校验限制单个 input/output 为 1 MiB、attributes 为 256 KiB / 128 项，并要求有效的 `start_time` 和非负 duration。超限请求返回 413。
 
-当前查询 API 包括 `GET /api/v1/traces` 和 `GET /api/v1/traces/{trace_id}`。列表支持 status、kind、name、时间范围、duration、token 数量过滤和不透明 cursor 分页。Trace List 使用 `trace_summaries` 物化摘要，摘要在 span upsert 的同一事务中更新。
+当前查询 API 包括 `GET /api/v1/traces` 和 `GET /api/v1/traces/{trace_id}`。列表支持 status、kind、name、时间范围、duration、token 数量过滤和不透明 cursor 分页。Trace List 使用 `trace_summaries` 物化摘要，摘要在 span upsert 的同一事务中更新。Trace 详情响应返回整条 Trace 的 `start_time`、`end_time`、`span_count`，以及当前页的 `spans` 和可选 `next_cursor`；Web Trace Explorer 可在树视图和时间线视图之间切换。
 
 Dashboard 使用 `GET /api/v1/dashboard`，默认聚合最近 24 小时，也支持 RFC3339 的 `start_time` / `end_time`。请求量、错误率、Token 和延迟分位数从 `trace_summaries` 聚合，span kind 用量从 spans 聚合；API Key 查询绑定 Key 的 Workspace，用户 Session 查询绑定 `X-Tracy-Workspace-ID` 指定并经成员关系校验的 Workspace。
 

@@ -85,6 +85,7 @@ curl -X POST http://localhost:8080/api/v1/oauth/apps \
 - `POST /v1/loop/traces/ingest` 接受官方 CozeLoop Go SDK 的 `{ "spans": [...] }` payload，成功返回 `{"code":0,"msg":""}`。
 - `POST /api/v1/auth/logout` 撤销当前 Web Session；API 未匹配路径返回 JSON 404/405，不会回退到 SPA。
 - `GET /api/v1/traces` 返回当前 Workspace 的 Trace 列表；`GET /api/v1/traces/{trace_id}` 返回单个 Trace。
+- Trace 详情响应包含整条 Trace 的 `start_time`、`end_time` 和 `span_count`，同时通过 `spans` 返回当前分页；Web Trace Explorer 支持树视图和时间线视图。
 - `GET /api/v1/dashboard` 返回当前 Workspace 的请求量、错误率、Token 汇总、延迟分位数和按 span kind 的用量分布。
 - `POST /api/permission/oauth2/token` 支持 CozeLoop JWT bearer grant；Workspace Owner 可通过 `POST/GET /api/v1/oauth/apps` 管理当前 Workspace 的 OAuth App。
 - `/` 和其它前端路径返回嵌入式 React Trace Explorer。
