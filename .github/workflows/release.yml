@@ -98,7 +98,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=tag
+            type=semver,pattern={{version}}
             type=raw,value=latest
 
       - name: Build and push image

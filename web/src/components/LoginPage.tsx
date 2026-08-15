@@ -8,7 +8,7 @@ type LoginPageProps = {
 };
 
 export function LoginPage({ onLogin }: LoginPageProps) {
-  const { t } = usePreferences();
+  const { language, theme, t, toggleLanguage, toggleTheme } = usePreferences();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -27,10 +27,28 @@ export function LoginPage({ onLogin }: LoginPageProps) {
   return (
     <main className="auth-page">
       <section className="auth-card">
+        <div className="auth-preferences" aria-label={t("preferences")}>
+          <Button
+            aria-label={t("language")}
+            className="preference-button"
+            theme="borderless"
+            type="tertiary"
+            onClick={toggleLanguage}
+          >
+            {language === "en" ? "中" : "EN"}
+          </Button>
+          <Button
+            aria-label={theme === "dark" ? t("theme") : t("darkTheme")}
+            className="preference-button"
+            theme="borderless"
+            type="tertiary"
+            onClick={toggleTheme}
+            title={theme === "dark" ? t("theme") : t("darkTheme")}
+          >
+            {theme === "dark" ? "☼" : "☾"}
+          </Button>
+        </div>
         <img className="auth-brand-mark" src="/tracy.svg" alt="Tracy" />
-        <span className="eyebrow">{t("selfHosted")}</span>
-        <h1>{t("welcomeBack")}</h1>
-        <p>{t("signInHint")}</p>
         <Form
           layout="vertical"
           onSubmit={(values) => void submit(values as { email: string; password: string })}

@@ -92,30 +92,39 @@ h1 span {
 .auth-brand-mark {
   display: block;
   height: 48px;
-  margin-bottom: 26px;
+  margin: 0 auto 38px;
   width: 48px;
 }
-.auth-card h1,
 .workspace-card h1 {
   color: #eef4fd;
   font-size: 26px;
   letter-spacing: -0.04em;
   margin: 8px 0;
 }
-.auth-card p {
-  color: #8094b2;
-  font-size: 13px;
-  line-height: 1.6;
-  margin-bottom: 22px;
-}
 .auth-card input {
   display: block;
-  margin-top: 9px;
+  margin-top: 0;
   width: 100%;
 }
 .auth-card > button {
   margin-top: 14px;
   width: 100%;
+}
+.auth-card {
+  position: relative;
+}
+.auth-preferences {
+  display: flex;
+  gap: 4px;
+  position: absolute;
+  right: 24px;
+  top: 24px;
+}
+.auth-preferences .preference-button.semi-button {
+  aspect-ratio: 1;
+  height: 36px;
+  padding: 0;
+  width: 36px;
 }
 .auth-error {
   color: #ff9ba0;
@@ -947,7 +956,7 @@ button {
 }
 button:focus-visible,
 select:focus-visible,
-input:focus-visible,
+input:not(.semi-input):focus-visible,
 .workspace-menu-trigger:focus-visible,
 .user-summary:focus-visible,
 .sidebar-nav-item:focus-visible {
@@ -1281,11 +1290,24 @@ footer {
   border-color: #d1deec;
   box-shadow: 0 24px 80px #38547a1a;
 }
-[data-theme="light"] .auth-card h1,
 [data-theme="light"] .workspace-card h1 {
   color: #1b2a40;
 }
-[data-theme="light"] .auth-card p {
+[data-theme="light"] .auth-card .semi-input-wrapper {
+  background: #ffffff;
+  border-color: #d5dfec;
+}
+[data-theme="light"] .auth-card .semi-input-wrapper:hover {
+  border-color: #a8bdd8;
+}
+[data-theme="light"] .auth-card .semi-input-wrapper-focus {
+  border-color: #6c95cf;
+  box-shadow: 0 0 0 2px #6c95cf1c;
+}
+[data-theme="light"] .auth-card .semi-input {
+  color: #243652;
+}
+[data-theme="light"] .auth-card .semi-input::placeholder {
   color: #657792;
 }
 [data-theme="light"] .workspace-option {
@@ -2886,6 +2908,13 @@ footer {
   color: #dce7fb;
   min-height: 42px;
 }
+.auth-card .semi-input-wrapper {
+  align-items: center;
+  display: flex;
+  height: 52px;
+  min-height: 52px;
+  overflow: hidden;
+}
 .workspace-card .semi-input-wrapper {
   align-items: center;
   display: flex;
@@ -2907,6 +2936,18 @@ footer {
   color: #dce7fb;
   margin-top: 0;
   width: 100%;
+}
+.auth-card .semi-input {
+  background: transparent;
+  border: 0;
+  flex: 1;
+  height: 50px;
+  line-height: normal;
+  min-width: 0;
+  padding: 0 14px;
+}
+.auth-card .semi-input:focus-visible {
+  outline: 0;
 }
 .workspace-card .semi-input {
   line-height: 20px;
