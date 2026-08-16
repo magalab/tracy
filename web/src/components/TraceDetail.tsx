@@ -1,9 +1,11 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import type { Span } from "../types";
 import { usePreferences } from "../i18n";
+import { copyToClipboard } from "../utils/clipboard";
 import Button from "@douyinfe/semi-ui/lib/es/button";
 import TabPane from "@douyinfe/semi-ui/lib/es/tabs/TabPane";
 import Tabs from "@douyinfe/semi-ui/lib/es/tabs";
+import Toast from "@douyinfe/semi-ui/lib/es/toast";
 import Tooltip from "@douyinfe/semi-ui/lib/es/tooltip";
 import IconClose from "@douyinfe/semi-icons/lib/es/icons/IconClose";
 import IconCopy from "@douyinfe/semi-icons/lib/es/icons/IconCopy";
@@ -321,10 +323,17 @@ export function TraceDetail({
   }
 
   async function copyValue(target: string, value: string) {
-    if (!navigator.clipboard) return;
-    await navigator.clipboard.writeText(value);
-    setCopiedTarget(target);
-    window.setTimeout(() => setCopiedTarget(null), 1600);
+    try {
+      if (!(await copyToClipboard(value))) {
+        Toast.error({ content: t("copyFailed"), showClose: false });
+        return;
+      }
+      setCopiedTarget(target);
+      Toast.success({ content: t("copied"), showClose: false });
+      window.setTimeout(() => setCopiedTarget(null), 1600);
+    } catch {
+      Toast.error({ content: t("copyFailed"), showClose: false });
+    }
   }
 
   function renderFactsPanel() {

@@ -8,6 +8,7 @@ import Button from "@douyinfe/semi-ui/lib/es/button";
 import Input from "@douyinfe/semi-ui/lib/es/input";
 import Popover from "@douyinfe/semi-ui/lib/es/popover";
 import { APIError } from "../api/client";
+import { copyToClipboard } from "../utils/clipboard";
 
 type WorkspaceMenuProps = {
   workspaces: Workspace[];
@@ -50,13 +51,16 @@ export function WorkspaceMenu({ workspaces, activeID, onSelect, onCreate }: Work
   async function copyWorkspaceID() {
     if (!active?.id) return;
     try {
-      await navigator.clipboard.writeText(active.id);
+      if (!(await copyToClipboard(active.id))) {
+        Toast.error({ content: t("copyFailed"), showClose: false });
+        return;
+      }
       setCopiedID(true);
       Toast.success({ content: t("workspaceIDCopied"), showClose: false });
       window.setTimeout(() => setCopiedID(false), 1800);
-    } catch (err) {
+    } catch {
       Toast.error({
-        content: err instanceof Error ? err.message : t("copyFailed"),
+        content: t("copyFailed"),
         showClose: false,
       });
     }

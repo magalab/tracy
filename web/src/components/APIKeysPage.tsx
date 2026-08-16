@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { usePreferences } from "../i18n";
 import { createWorkspaceKey, listWorkspaceKeys, revokeWorkspaceKey } from "../api/client";
 import type { APIKey } from "../types";
+import { copyToClipboard } from "../utils/clipboard";
 
 type APIKeysPageProps = { token: string; workspaceID: string };
 
@@ -85,12 +86,16 @@ export function APIKeysPage({ token, workspaceID }: APIKeysPageProps) {
 
   async function copyToken() {
     try {
-      await navigator.clipboard.writeText(newToken);
+      if (!(await copyToClipboard(newToken))) {
+        setError(t("copyFailed"));
+        Toast.error({ content: t("copyFailed"), showClose: false });
+        return;
+      }
       setCopied(true);
       Toast.success({ content: t("copied"), showClose: false });
       window.setTimeout(() => setCopied(false), 1800);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+    } catch {
+      setError(t("copyFailed"));
       Toast.error({ content: t("copyFailed"), showClose: false });
     }
   }
