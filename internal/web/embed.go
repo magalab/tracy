@@ -8,7 +8,11 @@ import (
 	"strings"
 )
 
-//go:embed dist
+// Include Vite chunks whose names start with '_' (for example _baseDifference).
+// Plain "dist" patterns intentionally skip files and directories beginning with
+// '.' or '_'; the all: prefix is required for a complete embedded asset tree.
+//
+//go:embed all:dist
 var files embed.FS
 
 func Handler() http.Handler {
@@ -20,7 +24,16 @@ func Handler() http.Handler {
 			name = "index.html"
 		}
 		if _, err := fs.Stat(root, name); err != nil {
+			if strings.HasPrefix(name, "assets/") {
+				http.NotFound(w, r)
+				return
+			}
 			r.URL.Path = "/index.html"
+		}
+		if name == "index.html" {
+			w.Header().Set("Cache-Control", "no-cache")
+		} else if strings.HasPrefix(name, "assets/") {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
 		static.ServeHTTP(w, r)
 	})

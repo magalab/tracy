@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { IconCopy, IconTick } from "@douyinfe/semi-icons";
-import { Toast } from "@douyinfe/semi-ui";
+import IconCopy from "@douyinfe/semi-icons/lib/es/icons/IconCopy";
+import IconTick from "@douyinfe/semi-icons/lib/es/icons/IconTick";
+import Toast from "@douyinfe/semi-ui/lib/es/toast";
 import { usePreferences } from "../i18n";
 import type { Workspace } from "../types";
 import Button from "@douyinfe/semi-ui/lib/es/button";

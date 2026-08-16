@@ -9,7 +9,7 @@ vet:
 test-cozeloop:
 	cd tests/cozeloop-e2e && go test ./...
 
-run:
+run: build-web
 	go run ./cmd/server
 
 build-web:

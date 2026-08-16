@@ -1,0 +1,8 @@
+/* Keep the overview and account controls out of the scrollable navigation area. */
+.app-sidebar .sidebar-nav {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+.app-sidebar .sidebar-user {
+  margin-top: auto;
+}

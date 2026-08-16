@@ -1,0 +1,85 @@
+/* Trace list: Semi DatePicker range control overrides. */
+.trace-filter-date.semi-datepicker {
+  height: 42px;
+  width: 100%;
+}
+.trace-filter-date .semi-datepicker-range-input {
+  align-items: center;
+  background: var(--surface-control);
+  border: 1px solid var(--border-control);
+  border-radius: 7px;
+  display: flex;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+.trace-filter-date .semi-datepicker-range-input:hover,
+.trace-filter-date .semi-datepicker-range-input:focus-within {
+  border-color: var(--accent);
+}
+.trace-filter-date .semi-datepicker-range-input:focus-within {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+  outline: 0;
+}
+.trace-filter-date .semi-datepicker-range-input-wrapper {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  padding: 0 8px;
+}
+.trace-filter-date .semi-datepicker-range-input-wrapper:hover,
+.trace-filter-date .semi-datepicker-range-input-wrapper-focus,
+.trace-filter-date .semi-datepicker-range-input-wrapper-active {
+  background: transparent;
+  border-color: transparent;
+}
+.trace-filter-date .semi-datepicker-range-input-wrapper .semi-input-wrapper {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: flex;
+  height: 100%;
+  line-height: 20px;
+  min-height: 0;
+  padding: 0;
+}
+.trace-filter-date .semi-datepicker-range-input-wrapper .semi-input {
+  background: transparent;
+  color: var(--text-control);
+  font-size: 13px !important;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 4px;
+}
+.trace-filter-date .semi-datepicker-range-input-separator {
+  align-items: center;
+  color: var(--text-secondary);
+  display: flex;
+  height: 100%;
+  line-height: 20px;
+  padding: 0 4px;
+}
+[data-theme="light"] .trace-filter-date .semi-datepicker-range-input {
+  background: var(--surface-control);
+  border-color: var(--border-control);
+}
+[data-theme="light"] .trace-filter-date .semi-datepicker-range-input:hover,
+[data-theme="light"] .trace-filter-date .semi-datepicker-range-input:focus-within {
+  border-color: var(--accent);
+}
+[data-theme="light"] .trace-filter-date .semi-datepicker-range-input:focus-within {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+[data-theme="light"] .trace-filter-date .semi-datepicker-range-input-wrapper .semi-input {
+  color: var(--text-control);
+}
+[data-theme="light"] .trace-filter-date .semi-datepicker-range-input-separator {
+  color: var(--text-secondary);
+}

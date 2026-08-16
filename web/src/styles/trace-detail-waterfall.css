@@ -1,0 +1,307 @@
+/* Trace Detail: tree/waterfall view controls and waterfall canvas. */
+.detail-view-switch {
+  display: flex;
+  gap: 4px;
+  margin: 0 14px 10px;
+}
+.detail-view-switch button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #7f91ac;
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 6px 8px;
+}
+.detail-view-switch button:hover,
+.detail-view-switch button.active {
+  background: #162944;
+  border-color: #315b8f;
+  color: #e8f0fb;
+}
+.detail-view-switch button:focus-visible {
+  outline: 2px solid #70a7ff;
+  outline-offset: 1px;
+}
+.waterfall-scroll {
+  min-width: 100%;
+  overflow: hidden;
+  padding: 0 10px 16px;
+}
+.waterfall {
+  min-width: 0;
+  width: 100%;
+}
+.waterfall-header,
+.waterfall-row {
+  display: grid;
+  grid-template-columns: minmax(145px, 42%) minmax(0, 1fr);
+  min-height: 35px;
+}
+.waterfall-header {
+  color: #8192ab;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.waterfall-label {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 8px;
+}
+.waterfall-axis,
+.waterfall-track {
+  background-image: linear-gradient(to right, #203653 1px, transparent 1px);
+  background-size: 25% 100%;
+  min-width: 0;
+  position: relative;
+}
+.waterfall-axis {
+  border-bottom: 1px solid var(--border-detail);
+  height: 28px;
+}
+.waterfall-axis span {
+  position: absolute;
+  top: 5px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.waterfall-axis span:first-child {
+  transform: none;
+}
+.waterfall-axis span:last-child {
+  transform: translateX(-100%);
+}
+.waterfall-row {
+  border-bottom: 1px solid #13243b;
+  min-height: 42px;
+}
+.waterfall-row:hover {
+  background: #101f35;
+}
+.waterfall-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.waterfall-kind-name {
+  color: #7185a2;
+  flex: 0 0 auto;
+  font-size: 9px;
+  max-width: 62px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.waterfall-kind {
+  background: #64748b;
+  border-radius: 50%;
+  flex: 0 0 7px;
+  height: 7px;
+  width: 7px;
+}
+.waterfall-kind.llm,
+.waterfall-bar.llm {
+  background-color: #00a8a5;
+}
+.waterfall-kind.tool,
+.waterfall-bar.tool {
+  background-color: #2cac75;
+}
+.waterfall-kind.agent,
+.waterfall-bar.agent {
+  background-color: #536dff;
+}
+.waterfall-kind.retriever,
+.waterfall-bar.retriever {
+  background-color: #a5bd42;
+}
+.waterfall-bar {
+  background: #64748b;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #ffffff2e;
+  cursor: pointer;
+  height: 13px;
+  min-width: 4px;
+  position: absolute;
+  top: 14px;
+  transition:
+    filter 120ms ease,
+    box-shadow 120ms ease;
+}
+.waterfall-bar:hover,
+.waterfall-bar.active {
+  box-shadow:
+    0 0 0 2px #dceaff,
+    0 0 10px #70a7ff80;
+  filter: brightness(1.12);
+}
+.waterfall-bar.error {
+  background-color: #df6670;
+  box-shadow: inset 0 0 0 1px #ffd4d7;
+}
+.waterfall-bar:focus-visible {
+  outline: 2px solid #87b5ff;
+  outline-offset: 2px;
+}
+[data-theme="light"] .detail-view-switch button {
+  color: #607594;
+}
+[data-theme="light"] .detail-view-switch button:hover,
+[data-theme="light"] .detail-view-switch button.active {
+  background: #eaf2fc;
+  border-color: #a9c8ed;
+  color: var(--accent-strong);
+}
+[data-theme="light"] .waterfall-axis,
+[data-theme="light"] .waterfall-track {
+  background-image: linear-gradient(to right, #d7e2ef 1px, transparent 1px);
+}
+[data-theme="light"] .waterfall-row {
+  border-color: #e1e8f1;
+}
+[data-theme="light"] .waterfall-row:hover {
+  background: #f3f7fc;
+}
+[data-theme="light"] .waterfall-kind-name {
+  color: #73839a;
+}
+
+/* Tree keeps the original three-column workbench. */
+.detail-workbench.tree-mode {
+  display: grid;
+  grid-template-columns: minmax(270px, 31%) minmax(0, 1fr) 210px;
+  min-height: 620px;
+}
+.tree-mode .detail-inspector {
+  display: contents;
+}
+.tree-mode .detail-inspector-close {
+  display: none;
+}
+
+/* Waterfall uses the whole canvas; the inspector is an on-demand overlay. */
+.detail-workbench.waterfall-mode {
+  background: #080f1d;
+  display: block;
+  min-height: 620px;
+  overflow: hidden;
+  position: relative;
+}
+.waterfall-mode .detail-tree-column {
+  border-right: 0;
+  min-height: 620px;
+  padding: 18px 0;
+  width: 100%;
+}
+.waterfall-mode .waterfall-scroll {
+  overflow-x: hidden;
+  width: 100%;
+}
+.waterfall-mode .waterfall {
+  min-width: 0;
+  width: 100%;
+}
+.waterfall-mode .detail-inspector {
+  background: #0d1829;
+  border-left: 1px solid #2a4264;
+  bottom: 0;
+  box-shadow: -20px 0 55px #00000045;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translateX(102%);
+  transition:
+    transform 180ms ease,
+    visibility 180ms ease;
+  visibility: hidden;
+  width: min(440px, calc(100% - 24px));
+  z-index: 10;
+}
+.waterfall-mode.inspector-open .detail-inspector {
+  transform: translateX(0);
+  visibility: visible;
+}
+.waterfall-mode:not(.inspector-open) .detail-inspector {
+  pointer-events: none;
+}
+.waterfall-mode .detail-inspector-close {
+  align-items: center;
+  color: #9eb0ca;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  margin: 10px 12px 0 auto;
+  min-height: 34px;
+  padding: 0;
+  position: relative;
+  width: 34px;
+  z-index: 1;
+}
+.waterfall-mode .detail-inspector-close:hover {
+  background: #162944;
+  color: #ffffff;
+}
+.waterfall-mode .detail-content-column {
+  min-width: 0;
+  padding: 8px 22px 20px;
+}
+.waterfall-mode .detail-content-column > .detail-tabs {
+  margin: 0 -22px 24px;
+}
+.waterfall-mode .detail-facts-panel {
+  border-left: 0;
+  border-top: 1px solid var(--border-detail);
+  display: grid;
+  flex: 0 0 auto;
+  gap: 7px 18px;
+  grid-template-columns: minmax(72px, 0.7fr) minmax(0, 1.3fr);
+  padding: 18px 22px 24px;
+}
+.waterfall-mode .detail-facts-panel span {
+  margin-top: 0;
+}
+.waterfall-mode .detail-facts-panel b {
+  min-width: 0;
+}
+[data-theme="light"] .detail-workbench.waterfall-mode {
+  background: #f3f6fb;
+}
+[data-theme="light"] .waterfall-mode .detail-inspector {
+  background: #ffffff;
+  border-color: #d1deec;
+  box-shadow: -20px 0 55px #38547a24;
+}
+[data-theme="light"] .waterfall-mode .detail-inspector-close {
+  color: #536987;
+}
+[data-theme="light"] .waterfall-mode .detail-inspector-close:hover {
+  background: #eef4fc;
+  color: var(--accent-strong);
+}
+[data-theme="light"] .waterfall-mode .detail-facts-panel {
+  border-color: #dce5f0;
+}
+@media (max-width: 58rem) {
+  .detail-workbench.tree-mode {
+    grid-template-columns: 1fr;
+  }
+  .waterfall-mode .detail-inspector {
+    width: min(440px, calc(100% - 16px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waterfall-bar,
+  .waterfall-mode .detail-inspector {
+    transition: none;
+  }
+}

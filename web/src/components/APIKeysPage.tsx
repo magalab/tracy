@@ -1,5 +1,10 @@
-import { IconClose, IconCopy, IconDeleteStroked, IconPlus, IconTick } from "@douyinfe/semi-icons";
-import { Modal, Toast } from "@douyinfe/semi-ui";
+import IconClose from "@douyinfe/semi-icons/lib/es/icons/IconClose";
+import IconCopy from "@douyinfe/semi-icons/lib/es/icons/IconCopy";
+import IconDeleteStroked from "@douyinfe/semi-icons/lib/es/icons/IconDeleteStroked";
+import IconPlus from "@douyinfe/semi-icons/lib/es/icons/IconPlus";
+import IconTick from "@douyinfe/semi-icons/lib/es/icons/IconTick";
+import Modal from "@douyinfe/semi-ui/lib/es/modal";
+import Toast from "@douyinfe/semi-ui/lib/es/toast";
 import { useCallback, useEffect, useState } from "react";
 import { usePreferences } from "../i18n";
 import { createWorkspaceKey, listWorkspaceKeys, revokeWorkspaceKey } from "../api/client";

@@ -3,17 +3,27 @@ import { lazy, StrictMode, Suspense, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import Button from "@douyinfe/semi-ui/lib/es/button";
 import "@douyinfe/semi-ui/lib/es/_base/base.css";
-import { AppSidebar } from "./components/AppSidebar";
-import { LoginPage } from "./components/LoginPage";
+const AppSidebar = lazy(() =>
+  import("./components/AppSidebar").then((module) => ({ default: module.AppSidebar })),
+);
+const LoginPage = lazy(() =>
+  import("./components/LoginPage").then((module) => ({ default: module.LoginPage })),
+);
 const MetricsOverview = lazy(() =>
   import("./components/MetricsOverview").then((module) => ({ default: module.MetricsOverview })),
 );
 const TraceDetail = lazy(() =>
   import("./components/TraceDetail").then((module) => ({ default: module.TraceDetail })),
 );
-import { TraceList } from "./components/TraceList";
-import { WorkspacePicker } from "./components/WorkspacePicker";
-import { APIKeysPage } from "./components/APIKeysPage";
+const TraceList = lazy(() =>
+  import("./components/TraceList").then((module) => ({ default: module.TraceList })),
+);
+const WorkspacePicker = lazy(() =>
+  import("./components/WorkspacePicker").then((module) => ({ default: module.WorkspacePicker })),
+);
+const APIKeysPage = lazy(() =>
+  import("./components/APIKeysPage").then((module) => ({ default: module.APIKeysPage })),
+);
 import {
   getCurrentUser,
   logout as logoutRequest,
@@ -25,7 +35,10 @@ import {
 import { useTraceExplorer } from "./hooks/useTraceExplorer";
 import { PreferencesProvider, usePreferences } from "./i18n";
 import type { User, Workspace } from "./types";
+import "./styles/base.css";
 import "./styles.css";
+import "./styles/semi-overrides.css";
+import "./styles/trace-filter-date.css";
 
 const sessionKey = "tracy.session_token";
 const userKey = "tracy.user";
@@ -145,145 +158,155 @@ function App() {
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceID);
 
   if (!authReady) return <div className="page-loading">{t("loading")}</div>;
-  if (!user) return <LoginPage onLogin={login} />;
+  if (!user) {
+    return (
+      <Suspense fallback={<div className="page-loading">{t("loading")}</div>}>
+        <LoginPage onLogin={login} />
+      </Suspense>
+    );
+  }
   if (!workspacesReady) return <div className="page-loading">{t("loading")}</div>;
   if (!activeWorkspace) {
     return (
-      <WorkspacePicker
-        workspaces={workspaces}
-        activeID={activeWorkspaceID}
-        error={workspaceError}
-        onSelect={selectWorkspace}
-        onCreate={createUserWorkspace}
-      />
+      <Suspense fallback={<div className="page-loading">{t("loading")}</div>}>
+        <WorkspacePicker
+          workspaces={workspaces}
+          activeID={activeWorkspaceID}
+          error={workspaceError}
+          onSelect={selectWorkspace}
+          onCreate={createUserWorkspace}
+        />
+      </Suspense>
     );
   }
 
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}>
-      <AppSidebar
-        user={user}
-        workspaces={workspaces}
-        activeID={activeWorkspaceID}
-        onSelectWorkspace={selectWorkspace}
-        onCreateWorkspace={createUserWorkspace}
-        onLogout={logout}
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
-        activePage={activePage}
-        onPageChange={(page) => {
-          setActivePage(page);
-          if (page !== "traces") explorer.clearSelection();
-        }}
-      />
-      <div className="app-main">
-        <header className="topbar">
-          <div className="trace-context">
-            <span className="eyebrow">
-              {t(
-                activePage === "overview"
-                  ? "overview"
-                  : activePage === "keys"
-                    ? "apiKeys"
-                    : "trace",
-              )}
-            </span>
-            <strong className="topbar-workspace">{activeWorkspace.name}</strong>
-          </div>
-          <div className="topbar-actions">
-            <div className="preference-actions">
-              <Button
-                className="preference-button"
-                theme="borderless"
-                type="tertiary"
-                onClick={toggleLanguage}
-              >
-                {language === "en" ? "中" : "EN"}
-              </Button>
-              <Button
-                className="preference-button"
-                theme="borderless"
-                type="tertiary"
-                onClick={toggleTheme}
-                aria-label={theme === "dark" ? t("theme") : t("darkTheme")}
-                title={theme === "dark" ? t("theme") : t("darkTheme")}
-              >
-                {theme === "dark" ? "☼" : "☾"}
-              </Button>
-            </div>
-          </div>
-        </header>
-        <main className="main-content">
-          <Suspense fallback={<div className="page-loading">{t("loading")}</div>}>
-            {activePage === "keys" ? (
-              <APIKeysPage token={token} workspaceID={activeWorkspaceID} />
-            ) : activePage === "overview" ? (
-              <section className="overview-page">
-                <div className="overview-page-heading">
-                  <span className="eyebrow">{t("operations")}</span>
-                  <h2>{t("traceHealth")}</h2>
-                  <p>{t("inspectHealth")}</p>
-                </div>
-                {explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
-              </section>
-            ) : (
-              <div className="trace-explorer-shell">
-                <TraceList
-                  traces={explorer.page.items}
-                  selectedID={explorer.selectedID}
-                  filter={filter}
-                  statusFilter={statusFilter}
-                  kindFilter={kindFilter}
-                  startDate={startDate}
-                  endDate={endDate}
-                  loading={explorer.loading}
-                  token={token}
-                  error={explorer.error}
-                  cursor={explorer.cursor}
-                  onFilterChange={setFilter}
-                  onStatusChange={setStatusFilter}
-                  onKindChange={setKindFilter}
-                  onStartDateChange={setStartDate}
-                  onEndDateChange={setEndDate}
-                  onOpen={(id) => void explorer.openTrace(id)}
-                  onRefresh={() => {
-                    void explorer.loadPage();
-                    void explorer.loadMetrics();
-                  }}
-                  onLoadMore={(nextCursor) => void explorer.loadPage(nextCursor)}
-                  onClearFilters={clearFilters}
-                />
-                {explorer.selectedID && (
-                  <>
-                    <button
-                      aria-label={t("backToTraces")}
-                      className="trace-detail-backdrop"
-                      onClick={explorer.clearSelection}
-                      type="button"
-                    />
-                    <div className="trace-detail-drawer">
-                      <TraceDetail
-                        selectedID={explorer.selectedID}
-                        selected={explorer.selected}
-                        details={explorer.selectedDetails}
-                        hasMore={Boolean(explorer.selectedNextCursor)}
-                        loadingMore={explorer.traceLoading}
-                        onLoadMore={() => void explorer.loadMoreTrace()}
-                        onBack={explorer.clearSelection}
-                      />
-                    </div>
-                  </>
+    <Suspense fallback={<div className="page-loading">{t("loading")}</div>}>
+      <div className={`app-shell ${sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}>
+        <AppSidebar
+          user={user}
+          workspaces={workspaces}
+          activeID={activeWorkspaceID}
+          onSelectWorkspace={selectWorkspace}
+          onCreateWorkspace={createUserWorkspace}
+          onLogout={logout}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((collapsed) => !collapsed)}
+          activePage={activePage}
+          onPageChange={(page) => {
+            setActivePage(page);
+            if (page !== "traces") explorer.clearSelection();
+          }}
+        />
+        <div className="app-main">
+          <header className="topbar">
+            <div className="trace-context">
+              <span className="eyebrow">
+                {t(
+                  activePage === "overview"
+                    ? "overview"
+                    : activePage === "keys"
+                      ? "apiKeys"
+                      : "trace",
                 )}
+              </span>
+              <strong className="topbar-workspace">{activeWorkspace.name}</strong>
+            </div>
+            <div className="topbar-actions">
+              <div className="preference-actions">
+                <Button
+                  className="preference-button"
+                  theme="borderless"
+                  type="tertiary"
+                  onClick={toggleLanguage}
+                >
+                  {language === "en" ? "中" : "EN"}
+                </Button>
+                <Button
+                  className="preference-button"
+                  theme="borderless"
+                  type="tertiary"
+                  onClick={toggleTheme}
+                  aria-label={theme === "dark" ? t("theme") : t("darkTheme")}
+                  title={theme === "dark" ? t("theme") : t("darkTheme")}
+                >
+                  {theme === "dark" ? "☼" : "☾"}
+                </Button>
               </div>
-            )}
-          </Suspense>
-        </main>
-        <footer>
-          <span>{t("localMode")}</span>
-          <span>{t("sqliteStore")}</span>
-        </footer>
+            </div>
+          </header>
+          <main className="main-content">
+            <Suspense fallback={<div className="page-loading">{t("loading")}</div>}>
+              {activePage === "keys" ? (
+                <APIKeysPage token={token} workspaceID={activeWorkspaceID} />
+              ) : activePage === "overview" ? (
+                <section className="overview-page">
+                  <div className="overview-page-heading">
+                    <span className="eyebrow">{t("operations")}</span>
+                    <h2>{t("traceHealth")}</h2>
+                    <p>{t("inspectHealth")}</p>
+                  </div>
+                  {explorer.metrics && <MetricsOverview metrics={explorer.metrics} />}
+                </section>
+              ) : (
+                <div className="trace-explorer-shell">
+                  <TraceList
+                    traces={explorer.page.items}
+                    selectedID={explorer.selectedID}
+                    filter={filter}
+                    statusFilter={statusFilter}
+                    kindFilter={kindFilter}
+                    startDate={startDate}
+                    endDate={endDate}
+                    loading={explorer.loading}
+                    token={token}
+                    error={explorer.error}
+                    cursor={explorer.cursor}
+                    onFilterChange={setFilter}
+                    onStatusChange={setStatusFilter}
+                    onKindChange={setKindFilter}
+                    onStartDateChange={setStartDate}
+                    onEndDateChange={setEndDate}
+                    onOpen={(id) => void explorer.openTrace(id)}
+                    onRefresh={() => {
+                      void explorer.loadPage();
+                      void explorer.loadMetrics();
+                    }}
+                    onLoadMore={(nextCursor) => void explorer.loadPage(nextCursor)}
+                    onClearFilters={clearFilters}
+                  />
+                  {explorer.selectedID && (
+                    <>
+                      <button
+                        aria-label={t("backToTraces")}
+                        className="trace-detail-backdrop"
+                        onClick={explorer.clearSelection}
+                        type="button"
+                      />
+                      <div className="trace-detail-drawer">
+                        <TraceDetail
+                          selectedID={explorer.selectedID}
+                          selected={explorer.selected}
+                          details={explorer.selectedDetails}
+                          hasMore={Boolean(explorer.selectedNextCursor)}
+                          loadingMore={explorer.traceLoading}
+                          onLoadMore={() => void explorer.loadMoreTrace()}
+                          onBack={explorer.clearSelection}
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </Suspense>
+          </main>
+          <footer>
+            <span>{t("localMode")}</span>
+            <span>{t("sqliteStore")}</span>
+          </footer>
+        </div>
       </div>
-    </div>
+    </Suspense>
   );
 }
 

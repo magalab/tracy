@@ -9,6 +9,8 @@ import IconClose from "@douyinfe/semi-icons/lib/es/icons/IconClose";
 import IconCopy from "@douyinfe/semi-icons/lib/es/icons/IconCopy";
 import IconExpand from "@douyinfe/semi-icons/lib/es/icons/IconExpand";
 import IconTick from "@douyinfe/semi-icons/lib/es/icons/IconTick";
+import "../styles/trace-detail-core.css";
+import "../styles/trace-detail-waterfall.css";
 
 type TraceDetailProps = {
   selectedID: string;

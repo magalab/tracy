@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { IconPlus } from "@douyinfe/semi-icons";
+import IconPlus from "@douyinfe/semi-icons/lib/es/icons/IconPlus";
 import { usePreferences } from "../i18n";
 import type { Workspace } from "../types";
 import Button from "@douyinfe/semi-ui/lib/es/button";
