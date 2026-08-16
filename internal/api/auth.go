@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/panda/tracy/internal/storage/meta"
+	"github.com/magalab/tracy/internal/storage/meta"
 )
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {

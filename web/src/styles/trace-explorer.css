@@ -440,7 +440,6 @@
 .semi-popover-content .workspace-menu-popover {
   box-shadow: none;
   position: static;
-  width: 280px;
 }
 .trace-filter-select .semi-select-selection,
 .trace-filter-date .semi-input-wrapper,
@@ -979,7 +978,8 @@
   border-color: var(--border-subtle);
 }
 [data-theme="light"] .detail-json-placeholder {
-  background: #f3f6fa;
-  border-color: #d7e1ed;
+  background: #ffffff;
+  border-color: #cbd8e8;
   color: #405674;
+  box-shadow: 0 2px 8px #36547a0b;
 }

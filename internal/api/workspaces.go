@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
-	"github.com/panda/tracy/internal/storage/meta"
+	"github.com/magalab/tracy/internal/storage/meta"
 )
 
 func (s *Server) listUserWorkspaces(w http.ResponseWriter, r *http.Request) {
@@ -36,8 +37,8 @@ func (s *Server) createUserWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.Name = strings.TrimSpace(body.Name)
-	if body.Name == "" || len(body.Name) > 128 {
-		errorJSON(w, http.StatusBadRequest, "invalid_workspace", "name is required and must be at most 128 bytes")
+	if body.Name == "" || utf8.RuneCountInString(body.Name) > 128 {
+		errorJSON(w, http.StatusBadRequest, "invalid_workspace", "name is required and must be at most 128 characters")
 		return
 	}
 	id, err := randomID("ws_", 12)
@@ -48,7 +49,11 @@ func (s *Server) createUserWorkspace(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().UTC()
 	workspace := meta.Workspace{ID: id, Name: body.Name, CreatedAt: now, UpdatedAt: now}
 	if err := s.meta.CreateWorkspaceForUser(r.Context(), workspace, meta.WorkspaceMember{WorkspaceID: id, UserID: key.UserID, Role: "owner", CreatedAt: now}); err != nil {
-		errorJSON(w, http.StatusConflict, "workspace_exists", "could not create workspace")
+		if errors.Is(err, meta.ErrWorkspaceNameExists) {
+			errorJSON(w, http.StatusConflict, "workspace_name_exists", "a workspace with this name already exists")
+			return
+		}
+		errorJSON(w, http.StatusInternalServerError, "storage_error", "could not create workspace")
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"workspace": workspace})

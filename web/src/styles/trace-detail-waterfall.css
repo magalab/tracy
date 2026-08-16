@@ -12,6 +12,7 @@
   cursor: pointer;
   font-size: 10px;
   letter-spacing: 0.04em;
+  min-height: 0;
   padding: 6px 8px;
 }
 .detail-view-switch button:hover,
@@ -128,6 +129,7 @@
   cursor: pointer;
   height: 13px;
   min-width: 4px;
+  min-height: 0;
   position: absolute;
   top: 14px;
   transition:
@@ -160,13 +162,13 @@
 }
 [data-theme="light"] .waterfall-axis,
 [data-theme="light"] .waterfall-track {
-  background-image: linear-gradient(to right, #d7e2ef 1px, transparent 1px);
+  background-image: linear-gradient(to right, #cbd8e8 1px, transparent 1px);
 }
 [data-theme="light"] .waterfall-row {
-  border-color: #e1e8f1;
+  border-color: #d7e1ed;
 }
 [data-theme="light"] .waterfall-row:hover {
-  background: #f3f7fc;
+  background: #edf3fa;
 }
 [data-theme="light"] .waterfall-kind-name {
   color: #73839a;
@@ -223,7 +225,7 @@
     transform 180ms ease,
     visibility 180ms ease;
   visibility: hidden;
-  width: min(440px, calc(100% - 24px));
+  width: min(540px, calc(100% - 24px));
   z-index: 10;
 }
 .waterfall-mode.inspector-open .detail-inspector {
@@ -254,23 +256,11 @@
   min-width: 0;
   padding: 8px 22px 20px;
 }
+.waterfall-mode .detail-facts-summary {
+  margin: 0 0 10px;
+}
 .waterfall-mode .detail-content-column > .detail-tabs {
   margin: 0 -22px 24px;
-}
-.waterfall-mode .detail-facts-panel {
-  border-left: 0;
-  border-top: 1px solid var(--border-detail);
-  display: grid;
-  flex: 0 0 auto;
-  gap: 7px 18px;
-  grid-template-columns: minmax(72px, 0.7fr) minmax(0, 1.3fr);
-  padding: 18px 22px 24px;
-}
-.waterfall-mode .detail-facts-panel span {
-  margin-top: 0;
-}
-.waterfall-mode .detail-facts-panel b {
-  min-width: 0;
 }
 [data-theme="light"] .detail-workbench.waterfall-mode {
   background: #f3f6fb;
@@ -286,9 +276,6 @@
 [data-theme="light"] .waterfall-mode .detail-inspector-close:hover {
   background: #eef4fc;
   color: var(--accent-strong);
-}
-[data-theme="light"] .waterfall-mode .detail-facts-panel {
-  border-color: #dce5f0;
 }
 @media (max-width: 58rem) {
   .detail-workbench.tree-mode {

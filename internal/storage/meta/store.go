@@ -6,14 +6,16 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
-	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+	modernsqlite "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 var ErrNotFound = errors.New("not found")
+var ErrWorkspaceNameExists = errors.New("workspace name already exists")
 
 type Workspace struct {
 	ID        string    `json:"id"`
@@ -59,6 +61,7 @@ type Store struct {
 	db             *sql.DB
 	lastUsedMu     sync.Mutex
 	lastUsedMemory map[string]time.Time
+	workspaceMu    sync.Mutex
 }
 
 var ErrAlreadyUsed = errors.New("OAuth JWT has already been used")
@@ -76,7 +79,23 @@ func HashPassword(password string) (string, error) {
 
 func (s *Store) Migrate(ctx context.Context) error { return migrate(ctx, s.db) }
 func migrate(ctx context.Context, db *sql.DB) error {
-	if _, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS workspace_members (workspace_id TEXT NOT NULL REFERENCES workspaces(id), user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL DEFAULT 'member', created_at INTEGER NOT NULL, PRIMARY KEY(workspace_id,user_id)); CREATE TABLE IF NOT EXISTS user_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id); CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'workspace', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER); CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash); CREATE TABLE IF NOT EXISTS oauth_apps (id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), public_key_id TEXT NOT NULL, public_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_apps_client_id ON oauth_apps(client_id); CREATE TABLE IF NOT EXISTS oauth_access_tokens (token_hash TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expiry ON oauth_access_tokens(expires_at); CREATE TABLE IF NOT EXISTS oauth_jti (client_id TEXT NOT NULL, jti TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(client_id,jti)); CREATE INDEX IF NOT EXISTS idx_oauth_jti_expiry ON oauth_jti(expires_at);`); err != nil {
+	const schema = `
+		CREATE TABLE IF NOT EXISTS workspaces (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+		CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at INTEGER NOT NULL);
+		CREATE TABLE IF NOT EXISTS workspace_members (workspace_id TEXT NOT NULL REFERENCES workspaces(id), user_id TEXT NOT NULL REFERENCES users(id), role TEXT NOT NULL DEFAULT 'member', created_at INTEGER NOT NULL, PRIMARY KEY(workspace_id,user_id));
+		CREATE TABLE IF NOT EXISTS workspace_name_claims (user_id TEXT NOT NULL REFERENCES users(id), name TEXT NOT NULL COLLATE NOCASE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), UNIQUE(user_id,name));
+		CREATE TABLE IF NOT EXISTS user_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
+		CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions(user_id);
+		CREATE TABLE IF NOT EXISTS api_keys (id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'workspace', expires_at INTEGER, revoked INTEGER NOT NULL DEFAULT 0, last_used_at INTEGER);
+		CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(token_hash);
+		CREATE TABLE IF NOT EXISTS oauth_apps (id TEXT PRIMARY KEY, client_id TEXT NOT NULL UNIQUE, workspace_id TEXT NOT NULL REFERENCES workspaces(id), public_key_id TEXT NOT NULL, public_key TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+		CREATE INDEX IF NOT EXISTS idx_oauth_apps_client_id ON oauth_apps(client_id);
+		CREATE TABLE IF NOT EXISTS oauth_access_tokens (token_hash TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id), expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL);
+		CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expiry ON oauth_access_tokens(expires_at);
+		CREATE TABLE IF NOT EXISTS oauth_jti (client_id TEXT NOT NULL, jti TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER NOT NULL, UNIQUE(client_id,jti));
+		CREATE INDEX IF NOT EXISTS idx_oauth_jti_expiry ON oauth_jti(expires_at);
+	`
+	if _, err := db.ExecContext(ctx, schema); err != nil {
 		return err
 	}
 	return nil
@@ -130,12 +149,20 @@ func (s *Store) CreateOAuthAccessToken(ctx context.Context, tokenHash, workspace
 	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_access_tokens(token_hash,workspace_id,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash, workspaceID, expiresAt.UTC().UnixMicro(), createdAt.UTC().UnixMicro())
 	return err
 }
-func (s *Store) CreateWorkspace(ctx context.Context, p Workspace) error {
+
+// CreateWorkspaceRecord inserts an unassociated workspace record for low-level setup.
+// User-facing creation must use CreateWorkspaceForUser so the membership and name claim are atomic.
+func (s *Store) CreateWorkspaceRecord(ctx context.Context, p Workspace) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO workspaces(id,name,created_at,updated_at) VALUES(?,?,?,?)`, p.ID, p.Name, p.CreatedAt.UnixMicro(), p.UpdatedAt.UnixMicro())
 	return err
 }
 
 func (s *Store) CreateWorkspaceForUser(ctx context.Context, p Workspace, member WorkspaceMember) error {
+	if p.ID != member.WorkspaceID {
+		return errors.New("workspace and member IDs must match")
+	}
+	s.workspaceMu.Lock()
+	defer s.workspaceMu.Unlock()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -147,13 +174,16 @@ func (s *Store) CreateWorkspaceForUser(ctx context.Context, p Workspace, member 
 	if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_members(workspace_id,user_id,role,created_at) VALUES(?,?,?,?)`, member.WorkspaceID, member.UserID, member.Role, member.CreatedAt.UTC().UnixMicro()); err != nil {
 		return err
 	}
+	if err = claimWorkspaceName(ctx, tx, member.UserID, p.Name, p.ID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
 func (s *Store) ConsumeOAuthJTI(ctx context.Context, clientID, jti string, expiresAt, createdAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_jti(client_id,jti,expires_at,created_at) VALUES(?,?,?,?)`, clientID, jti, expiresAt.UTC().UnixMicro(), createdAt.UTC().UnixMicro())
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if isUniqueConstraint(err) {
 			return ErrAlreadyUsed
 		}
 		return err
@@ -193,8 +223,47 @@ func (s *Store) UserByID(ctx context.Context, id string) (User, error) {
 }
 
 func (s *Store) AddWorkspaceMember(ctx context.Context, member WorkspaceMember) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO workspace_members(workspace_id,user_id,role,created_at) VALUES(?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role`, member.WorkspaceID, member.UserID, member.Role, member.CreatedAt.UTC().UnixMicro())
-	return err
+	s.workspaceMu.Lock()
+	defer s.workspaceMu.Unlock()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_members(workspace_id,user_id,role,created_at) VALUES(?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role`, member.WorkspaceID, member.UserID, member.Role, member.CreatedAt.UTC().UnixMicro()); err != nil {
+		return err
+	}
+	var name string
+	if err = tx.QueryRowContext(ctx, `SELECT name FROM workspaces WHERE id=?`, member.WorkspaceID).Scan(&name); err != nil {
+		return err
+	}
+	var claimedWorkspaceID string
+	err = tx.QueryRowContext(ctx, `SELECT workspace_id FROM workspace_name_claims WHERE user_id=? AND name=?`, member.UserID, name).Scan(&claimedWorkspaceID)
+	if errors.Is(err, sql.ErrNoRows) {
+		if err = claimWorkspaceName(ctx, tx, member.UserID, name, member.WorkspaceID); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	} else if claimedWorkspaceID != member.WorkspaceID {
+		return ErrWorkspaceNameExists
+	}
+	return tx.Commit()
+}
+
+func claimWorkspaceName(ctx context.Context, tx *sql.Tx, userID, name, workspaceID string) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_name_claims(user_id,name,workspace_id) VALUES(?,?,?)`, userID, name, workspaceID); err != nil {
+		if isUniqueConstraint(err) {
+			return ErrWorkspaceNameExists
+		}
+		return err
+	}
+	return nil
+}
+
+func isUniqueConstraint(err error) bool {
+	var sqliteErr *modernsqlite.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code() == sqlite3.SQLITE_CONSTRAINT_UNIQUE
 }
 
 func (s *Store) CreateSession(ctx context.Context, tokenHash, userID string, expiresAt, createdAt time.Time) error {

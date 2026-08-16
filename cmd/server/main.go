@@ -12,12 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/panda/tracy/internal/api"
-	"github.com/panda/tracy/internal/config"
-	"github.com/panda/tracy/internal/ingest"
-	"github.com/panda/tracy/internal/storage/meta"
-	sqlite "github.com/panda/tracy/internal/storage/sqlite"
-	tracestore "github.com/panda/tracy/internal/storage/trace/sqlite"
+	"github.com/magalab/tracy/internal/api"
+	"github.com/magalab/tracy/internal/config"
+	"github.com/magalab/tracy/internal/ingest"
+	"github.com/magalab/tracy/internal/storage/meta"
+	sqlite "github.com/magalab/tracy/internal/storage/sqlite"
+	tracestore "github.com/magalab/tracy/internal/storage/trace/sqlite"
 )
 
 func main() {
@@ -74,27 +74,26 @@ func main() {
 	<-cleanupDone
 }
 func ensureDefault(ctx context.Context, s *meta.Store, logger *slog.Logger) {
+	user := ensureDefaultUser(ctx, s, logger)
 	_, err := s.Workspace(ctx, "default")
-	if err == nil {
-		ensureDefaultUser(ctx, s, logger)
-		return
-	}
-	if !errors.Is(err, meta.ErrNotFound) {
+	if err != nil && !errors.Is(err, meta.ErrNotFound) {
 		must(logger, err)
 	}
 	now := time.Now().UTC()
-	must(logger, s.CreateWorkspace(ctx, meta.Workspace{ID: "default", Name: "Default Workspace", CreatedAt: now, UpdatedAt: now}))
-	ensureDefaultUser(ctx, s, logger)
+	if errors.Is(err, meta.ErrNotFound) {
+		must(logger, s.CreateWorkspaceForUser(ctx, meta.Workspace{ID: "default", Name: "Default Workspace", CreatedAt: now, UpdatedAt: now}, meta.WorkspaceMember{WorkspaceID: "default", UserID: user.ID, Role: "owner", CreatedAt: now}))
+		return
+	}
+	must(logger, s.AddWorkspaceMember(ctx, meta.WorkspaceMember{WorkspaceID: "default", UserID: user.ID, Role: "owner", CreatedAt: now}))
 }
 
-func ensureDefaultUser(ctx context.Context, s *meta.Store, logger *slog.Logger) {
+func ensureDefaultUser(ctx context.Context, s *meta.Store, logger *slog.Logger) meta.User {
 	email := os.Getenv("TRACY_ADMIN_EMAIL")
 	if email == "" {
 		email = "admin@localhost"
 	}
 	if user, err := s.UserByEmail(ctx, email); err == nil {
-		must(logger, s.AddWorkspaceMember(ctx, meta.WorkspaceMember{WorkspaceID: "default", UserID: user.ID, Role: "owner", CreatedAt: time.Now().UTC()}))
-		return
+		return user
 	} else if !errors.Is(err, meta.ErrNotFound) {
 		must(logger, err)
 	}
@@ -109,7 +108,7 @@ func ensureDefaultUser(ctx context.Context, s *meta.Store, logger *slog.Logger) 
 	must(logger, err)
 	now := time.Now().UTC()
 	must(logger, s.CreateUser(ctx, meta.User{ID: "default-user", Email: email, Name: "Admin", PasswordHash: hash, CreatedAt: now}))
-	must(logger, s.AddWorkspaceMember(ctx, meta.WorkspaceMember{WorkspaceID: "default", UserID: "default-user", Role: "owner", CreatedAt: now}))
+	return meta.User{ID: "default-user", Email: email, Name: "Admin", PasswordHash: hash, CreatedAt: now}
 }
 func must(logger *slog.Logger, err error) {
 	if err != nil {

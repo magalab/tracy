@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	sqlite "github.com/panda/tracy/internal/storage/sqlite"
-	domain "github.com/panda/tracy/internal/trace"
+	sqlite "github.com/magalab/tracy/internal/storage/sqlite"
+	domain "github.com/magalab/tracy/internal/trace"
 )
 
 func TestTraceSummaryAndFilters(t *testing.T) {

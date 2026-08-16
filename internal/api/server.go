@@ -16,12 +16,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/panda/tracy/compat/cozeloop"
-	"github.com/panda/tracy/internal/ingest"
-	"github.com/panda/tracy/internal/storage/meta"
-	tracestore "github.com/panda/tracy/internal/storage/trace"
-	domain "github.com/panda/tracy/internal/trace"
-	"github.com/panda/tracy/internal/web"
+	"github.com/magalab/tracy/compat/cozeloop"
+	"github.com/magalab/tracy/internal/ingest"
+	"github.com/magalab/tracy/internal/storage/meta"
+	tracestore "github.com/magalab/tracy/internal/storage/trace"
+	domain "github.com/magalab/tracy/internal/trace"
+	"github.com/magalab/tracy/internal/web"
 )
 
 type Server struct {

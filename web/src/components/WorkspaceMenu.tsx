@@ -7,6 +7,7 @@ import type { Workspace } from "../types";
 import Button from "@douyinfe/semi-ui/lib/es/button";
 import Input from "@douyinfe/semi-ui/lib/es/input";
 import Popover from "@douyinfe/semi-ui/lib/es/popover";
+import { APIError } from "../api/client";
 
 type WorkspaceMenuProps = {
   workspaces: Workspace[];
@@ -30,6 +31,17 @@ export function WorkspaceMenu({ workspaces, activeID, onSelect, onCreate }: Work
       await onCreate(name.trim());
       setName("");
       setOpen(false);
+    } catch (err) {
+      let message = t("workspaceCreateFailed");
+      if (err instanceof APIError && err.status === 409) {
+        message = t("workspaceNameExists");
+      } else if (err instanceof Error) {
+        message = err.message;
+      }
+      Toast.error({
+        content: message,
+        showClose: false,
+      });
     } finally {
       setCreating(false);
     }

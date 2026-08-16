@@ -1,4 +1,4 @@
-module github.com/panda/tracy/tests/cozeloop-e2e
+module github.com/magalab/tracy/tests/cozeloop-e2e
 
 go 1.26
 

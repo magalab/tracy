@@ -1,4 +1,4 @@
-module github.com/panda/tracy
+module github.com/magalab/tracy
 
 go 1.26
 

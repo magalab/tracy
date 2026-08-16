@@ -115,6 +115,13 @@ paths:
                   workspace: { $ref: '#/components/schemas/Workspace' }
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: A workspace with the same name is already available to the current user.
+        '500':
+          description: Workspace could not be persisted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /api/v1/workspaces/{workspaceID}/switch:
     post:
       operationId: switchWorkspace

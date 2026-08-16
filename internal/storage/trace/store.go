@@ -3,7 +3,7 @@ package trace
 import (
 	"context"
 	"errors"
-	domain "github.com/panda/tracy/internal/trace"
+	domain "github.com/magalab/tracy/internal/trace"
 )
 
 var ErrTooLarge = errors.New("trace exceeds response limits")

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/panda/tracy/internal/storage/sqlite"
-	tracestore "github.com/panda/tracy/internal/storage/trace/sqlite"
-	domain "github.com/panda/tracy/internal/trace"
+	"github.com/magalab/tracy/internal/storage/sqlite"
+	tracestore "github.com/magalab/tracy/internal/storage/trace/sqlite"
+	domain "github.com/magalab/tracy/internal/trace"
 )
 
 func BenchmarkAppendBatch(b *testing.B) {

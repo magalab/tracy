@@ -8,6 +8,17 @@ import type {
   Workspace,
 } from "../types";
 
+export class APIError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = "APIError";
+  }
+}
+
 export async function request<T>(
   path: string,
   token: string,
@@ -23,15 +34,21 @@ export async function request<T>(
     },
   });
   const raw = await response.text();
-  let data: { error?: { message?: string } } | undefined;
+  let data: { error?: { code?: string; message?: string } } | undefined;
   if (raw) {
     try {
-      data = JSON.parse(raw) as { error?: { message?: string } };
+      data = JSON.parse(raw) as { error?: { code?: string; message?: string } };
     } catch {
       data = undefined;
     }
   }
-  if (!response.ok) throw new Error(data?.error?.message ?? `Request failed (${response.status})`);
+  if (!response.ok) {
+    throw new APIError(
+      data?.error?.message ?? `Request failed (${response.status})`,
+      response.status,
+      data?.error?.code,
+    );
+  }
   return data as T;
 }
 

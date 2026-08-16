@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	domain "github.com/panda/tracy/internal/trace"
+	domain "github.com/magalab/tracy/internal/trace"
 )
 
 type UploadSpanData struct {

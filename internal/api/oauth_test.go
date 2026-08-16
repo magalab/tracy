@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
@@ -17,25 +16,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/panda/tracy/internal/ingest"
-	"github.com/panda/tracy/internal/storage/meta"
-	sqlitestore "github.com/panda/tracy/internal/storage/sqlite"
-	tracestore "github.com/panda/tracy/internal/storage/trace/sqlite"
+	"github.com/magalab/tracy/internal/ingest"
+	"github.com/magalab/tracy/internal/storage/meta"
+	sqlitestore "github.com/magalab/tracy/internal/storage/sqlite"
+	tracestore "github.com/magalab/tracy/internal/storage/trace/sqlite"
 )
 
 func TestJWTOAuthTokenExchange(t *testing.T) {
-	ctx := context.Background()
-	metaDB, err := sqlitestore.Open(ctx, t.TempDir()+"/meta.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer metaDB.Close()
-	metaStore := meta.NewStore(metaDB)
-	if err := metaStore.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
+	ctx, metaStore := newTestMetaStore(t)
 	now := time.Now().UTC()
-	if err := metaStore.CreateWorkspace(ctx, meta.Workspace{ID: "default", Name: "Default", CreatedAt: now, UpdatedAt: now}); err != nil {
+	if err := metaStore.CreateWorkspaceRecord(ctx, meta.Workspace{ID: "default", Name: "Default", CreatedAt: now, UpdatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)

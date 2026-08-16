@@ -43,8 +43,7 @@
   font-size: 18px;
 }
 .app-sidebar .overview-grid.compact .metric-card small,
-.app-sidebar .overview-grid.compact .metric-status,
-.app-sidebar .overview-grid.compact .metric-mark {
+.app-sidebar .overview-grid.compact .metric-status {
   display: none;
 }
 .app-sidebar.collapsed .overview-grid.compact {
@@ -115,7 +114,7 @@
 .app-sidebar .workspace-menu-popover {
   left: 0;
   right: auto;
-  width: 280px;
+  width: 210px;
   z-index: 30;
 }
 .sidebar-nav {

@@ -31,6 +31,7 @@ import {
   login as loginRequest,
   createWorkspace,
   switchWorkspace,
+  APIError,
 } from "./api/client";
 import { useTraceExplorer } from "./hooks/useTraceExplorer";
 import { PreferencesProvider, usePreferences } from "./i18n";
@@ -76,6 +77,16 @@ function App() {
     endDate ? new Date(endDate.replace(" ", "T")).toISOString() : "",
   );
 
+  function clearAuth() {
+    localStorage.removeItem(sessionKey);
+    localStorage.removeItem(userKey);
+    setToken("");
+    setUser(null);
+    setWorkspaces([]);
+    setActiveWorkspaceID("");
+    setWorkspaceError("");
+  }
+
   useEffect(() => {
     if (!token) {
       setUser(null);
@@ -88,10 +99,10 @@ function App() {
         setUser(data.user);
         setAuthReady(true);
       })
-      .catch(() => {
-        localStorage.removeItem(sessionKey);
-        localStorage.removeItem(userKey);
-        setToken("");
+      .catch((err) => {
+        if (err instanceof APIError && err.status === 401) {
+          clearAuth();
+        }
         setAuthReady(true);
       });
   }, [token]);
@@ -110,6 +121,10 @@ function App() {
         );
       })
       .catch((err) => {
+        if (err instanceof APIError && err.status === 401) {
+          clearAuth();
+          return;
+        }
         setWorkspaceError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => setWorkspacesReady(true));
@@ -127,18 +142,23 @@ function App() {
 
   function logout() {
     if (token) void logoutRequest(token).catch(() => undefined);
-    localStorage.removeItem(sessionKey);
-    localStorage.removeItem(userKey);
-    setToken("");
-    setUser(null);
-    setWorkspaces([]);
-    setActiveWorkspaceID("");
+    clearAuth();
   }
 
   async function createUserWorkspace(name: string) {
-    const data = await createWorkspace(token, name);
-    setWorkspaces((items) => [...items, data.workspace]);
-    setActiveWorkspaceID(data.workspace.id);
+    try {
+      const data = await createWorkspace(token, name);
+      setWorkspaces((items) => [...items, data.workspace]);
+      setActiveWorkspaceID(data.workspace.id);
+      setWorkspaceError("");
+    } catch (err) {
+      if (err instanceof APIError && err.status === 409) {
+        setWorkspaceError(t("workspaceNameExists"));
+      } else {
+        setWorkspaceError(err instanceof Error ? err.message : String(err));
+      }
+      throw err;
+    }
   }
 
   async function selectWorkspace(id: string) {

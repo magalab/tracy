@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	store "github.com/panda/tracy/internal/storage/trace"
-	domain "github.com/panda/tracy/internal/trace"
+	store "github.com/magalab/tracy/internal/storage/trace"
+	domain "github.com/magalab/tracy/internal/trace"
 )
 
 var ErrFull = errors.New("trace ingest queue is full")

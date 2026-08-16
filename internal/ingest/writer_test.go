@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	tracestore "github.com/panda/tracy/internal/storage/trace"
-	domain "github.com/panda/tracy/internal/trace"
+	tracestore "github.com/magalab/tracy/internal/storage/trace"
+	domain "github.com/magalab/tracy/internal/trace"
 )
 
 type fakeStore struct {

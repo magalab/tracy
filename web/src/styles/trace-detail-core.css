@@ -154,25 +154,98 @@
   color: #9eb4d2;
 }
 .detail-facts-panel {
+  background: #0d1829;
   border-left: 1px solid var(--border-detail);
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 24px 18px;
+  gap: 14px;
+  padding: 18px;
 }
 .detail-inspector {
   min-width: 0;
 }
-.detail-facts-panel span {
+.detail-facts-panel h3 {
+  color: var(--text-strong);
+  font-size: 12px;
+  margin: 0;
+}
+.detail-facts-badges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.detail-fact-badge,
+.detail-fact-duration {
+  background: #172944;
+  border: 1px solid #2d4b72;
+  border-radius: 999px;
+  color: #b6c7dd;
+  font-size: 10px;
+  line-height: 1;
+  padding: 6px 8px;
+}
+.detail-fact-badge.status-ok {
+  background: #0c3c31;
+  border-color: #19785e;
+  color: #80e0bb;
+}
+.detail-fact-badge.status-error {
+  background: #4a2027;
+  border-color: #a24c59;
+  color: #ffb0b7;
+}
+.detail-fact-badge.status-unset {
+  background: #2a3548;
+  border-color: #4a5c7a;
+  color: #b6c7dd;
+}
+.detail-fact-duration {
+  color: #edf3fc;
+  font-weight: 600;
+}
+.detail-fact-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.detail-fact-row span {
   color: #8192ab;
   font-size: 11px;
-  margin-top: 10px;
 }
-.detail-facts-panel b {
+.detail-fact-row b {
   color: var(--text-strong);
   font-size: 12px;
   font-weight: 500;
   overflow-wrap: anywhere;
+}
+.detail-facts-summary {
+  border-bottom: 1px solid var(--border-detail);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+  padding-bottom: 14px;
+}
+.detail-fact-summary-id {
+  align-self: center;
+  color: #8192ab;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.detail-fact-summary-time {
+  align-self: center;
+  color: #8192ab;
+  font-size: 10px;
+  margin-left: auto;
+}
+[data-theme="light"] .detail-fact-summary-time {
+  color: #73839a;
 }
 [data-theme="light"] .detail-back {
   color: #657792;
@@ -193,6 +266,39 @@
 [data-theme="light"] .detail-tree-column,
 [data-theme="light"] .detail-facts-panel {
   border-color: #dce5f0;
+}
+[data-theme="light"] .detail-tree-column {
+  background: #f7f9fc;
+}
+[data-theme="light"] .detail-content-column {
+  background: #ffffff;
+}
+[data-theme="light"] .detail-facts-panel {
+  background: #fbfcfe;
+}
+[data-theme="light"] .detail-fact-badge,
+[data-theme="light"] .detail-fact-duration {
+  background: #edf3fb;
+  border-color: #cbd9ea;
+  color: #536987;
+}
+[data-theme="light"] .detail-fact-badge.status-ok {
+  background: #e4f7ef;
+  border-color: #9ed7bd;
+  color: #176b4e;
+}
+[data-theme="light"] .detail-fact-badge.status-error {
+  background: #fbecee;
+  border-color: #e1aab1;
+  color: #a13f4c;
+}
+[data-theme="light"] .detail-fact-badge.status-unset {
+  background: #eef3fa;
+  border-color: #b9c8de;
+  color: #5d6f8a;
+}
+[data-theme="light"] .detail-fact-duration {
+  color: var(--text-strong);
 }
 [data-theme="light"] .trace-detail-toolbar strong {
   color: var(--text-strong);

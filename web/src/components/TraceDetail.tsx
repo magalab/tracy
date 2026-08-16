@@ -312,6 +312,10 @@ export function TraceDetail({
   const expandedOutputText = formatPayload(activeSpan?.output);
 
   function selectSpan(id: string) {
+    if (selectedSpanID === id && inspectorOpen) {
+      setInspectorOpen((open) => !open);
+      return;
+    }
     setSelectedSpanID(id);
     setInspectorOpen(true);
   }
@@ -321,6 +325,41 @@ export function TraceDetail({
     await navigator.clipboard.writeText(value);
     setCopiedTarget(target);
     window.setTimeout(() => setCopiedTarget(null), 1600);
+  }
+
+  function renderFactsPanel() {
+    return (
+      <div className="detail-facts-panel">
+        <h3>{t("facts")}</h3>
+        {renderFactBadges()}
+        <div className="detail-fact-row">
+          <span>{t("spanID")}</span>
+          <b title={activeSpan?.span_id}>{activeSpan?.span_id || "—"}</b>
+        </div>
+        <div className="detail-fact-row">
+          <span>{t("startTime")}</span>
+          <b>{activeSpan ? new Date(activeSpan.start_time).toLocaleString() : "—"}</b>
+        </div>
+      </div>
+    );
+  }
+
+  function renderFactBadges() {
+    const status = activeSpan?.status?.toLowerCase();
+    const statusClass = status === "error" ? "error" : status === "ok" ? "ok" : "unset";
+    return (
+      <div className="detail-facts-badges">
+        <span className={`detail-fact-badge status-${statusClass}`}>
+          {statusClass === "error"
+            ? t("errors")
+            : statusClass === "ok"
+              ? t("healthyStatus")
+              : t("unsetStatus")}
+        </span>
+        <span className="detail-fact-badge">{activeSpan?.kind || "custom"}</span>
+        <span className="detail-fact-duration">{formatDuration(activeSpan?.duration ?? 0)}</span>
+      </div>
+    );
   }
 
   return (
@@ -388,6 +427,18 @@ export function TraceDetail({
             type="tertiary"
           />
           <div className="detail-content-column">
+            {view === "waterfall" && (
+              <div className="detail-facts-summary">
+                {renderFactBadges()}
+                <span className="detail-fact-summary-id" title={activeSpan?.span_id}>
+                  {activeSpan?.span_id || "—"}
+                </span>
+                <span className="detail-fact-summary-time">
+                  {t("startTime")}:{" "}
+                  {activeSpan ? new Date(activeSpan.start_time).toLocaleString() : "—"}
+                </span>
+              </div>
+            )}
             <Tabs className="detail-tabs" defaultActiveKey="run" type="line">
               <TabPane itemKey="run" tab={t("run")}>
                 <div className="detail-tab-content">
@@ -481,18 +532,7 @@ export function TraceDetail({
               </TabPane>
             </Tabs>
           </div>
-          <div className="detail-facts-panel">
-            <span>{t("status")}</span>
-            <b>{activeSpan?.status || "—"}</b>
-            <span>{t("spanID")}</span>
-            <b>{activeSpan?.span_id || "—"}</b>
-            <span>{t("type")}</span>
-            <b>{activeSpan?.kind || "custom"}</b>
-            <span>{t("duration")}</span>
-            <b>{formatDuration(activeSpan?.duration ?? 0)}</b>
-            <span>{t("startTime")}</span>
-            <b>{activeSpan ? new Date(activeSpan.start_time).toLocaleString() : "—"}</b>
-          </div>
+          {view === "tree" && renderFactsPanel()}
         </aside>
       </div>
       {(hasMore || loadingMore) && (

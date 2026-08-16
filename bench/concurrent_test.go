@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/panda/tracy/internal/storage/sqlite"
-	tracestore "github.com/panda/tracy/internal/storage/trace/sqlite"
+	"github.com/magalab/tracy/internal/storage/sqlite"
+	tracestore "github.com/magalab/tracy/internal/storage/trace/sqlite"
 )
 
 func TestConcurrentReadWrite(t *testing.T) {

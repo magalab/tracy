@@ -15,7 +15,6 @@ export function MetricsOverview({
         <span className="metric-label">{t("requests")}</span>
         <strong>{metrics.request_count.toLocaleString()}</strong>
         <small>{t("tracesObserved")}</small>
-        <span className="metric-mark">↗</span>
       </article>
       <article className="metric-card">
         <span className="metric-label">{t("errorRate")}</span>

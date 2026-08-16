@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/panda/tracy/internal/storage/meta"
+	"github.com/magalab/tracy/internal/storage/meta"
 )
 
 const jwtBearerGrantType = "urn:ietf:params:oauth:grant-type:jwt-bearer"
