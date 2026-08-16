@@ -28,9 +28,12 @@ Run the container with SQLite files persisted under `./data`:
 
 ```bash
 docker run --rm -p 8080:8080 \
+  --user "$(id -u):$(id -g)" \
   -v "$(pwd)/data:/data" \
   tracy:local
 ```
+
+镜像默认以 root 运行。绑定挂载宿主机目录时，用 `--user "$(id -u):$(id -g)"` 覆盖为宿主机用户，`/data` 下的 SQLite 文件就会以宿主机用户属主落盘；不传时容器以 root 运行，能写入任意目录，但数据文件属主为 root。
 
 Release builds are produced from version tags and include `linux/amd64`, `linux/arm64`, and `darwin/arm64` archives. The same release workflow publishes only the semver tag (for example, `1.2.3`) and `latest` tags for the `linux/amd64` and `linux/arm64` image at `ghcr.io/<owner>/<repository>`.
 
