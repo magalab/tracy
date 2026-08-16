@@ -32,7 +32,7 @@ docker run --rm -p 8080:8080 \
   tracy:local
 ```
 
-Release builds are produced from version tags and include `linux/amd64`, `linux/arm64`, and `darwin/arm64` archives. The same release workflow publishes a `linux/amd64` and `linux/arm64` image to `ghcr.io/<owner>/<repository>`.
+Release builds are produced from version tags and include `linux/amd64`, `linux/arm64`, and `darwin/arm64` archives. The same release workflow publishes only the semver tag (for example, `1.2.3`) and `latest` tags for the `linux/amd64` and `linux/arm64` image at `ghcr.io/<owner>/<repository>`.
 
 首次启动会创建 `data/meta.db` 和 `data/traces.db`，并创建 `TRACY_ADMIN_EMAIL` / `TRACY_ADMIN_PASSWORD` 对应的管理员用户。服务不会自动创建 API Key；登录 Web 后可在当前 Workspace 的 API Keys 页面手动创建。
 

@@ -55,7 +55,7 @@ docker run --rm -p 8080:8080 \
 
 GitHub Actions 会在 push 和 pull request 中运行 Go 测试、静态检查、前端检查、Go binary 构建和 Docker 镜像构建。
 
-推送形如 `v1.2.3` 的 Git tag 后，Release workflow 会生成 `linux/amd64`、`linux/arm64` 和 `darwin/arm64` 二进制压缩包，并将 `linux/amd64` 与 `linux/arm64` 多架构镜像推送到 `ghcr.io/<owner>/<repository>`。仓库需要允许 GitHub Actions 使用 `packages: write` 权限。
+推送形如 `v1.2.3` 的 Git tag 后，Release workflow 会生成 `linux/amd64`、`linux/arm64` 和 `darwin/arm64` 二进制压缩包，并仅将 `1.2.3`（去掉 `v` 前缀）和 `latest` 标签的 `linux/amd64` 与 `linux/arm64` 多架构镜像推送到 `ghcr.io/<owner>/<repository>`。仓库需要允许 GitHub Actions 使用 `packages: write` 权限。
 
 ## OpenAPI
 
